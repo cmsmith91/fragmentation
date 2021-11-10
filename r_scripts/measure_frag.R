@@ -10,6 +10,7 @@ library(tidyverse)
 library(mapdata)
 library(stars)
 library(furrr)
+library(landscapemetrics)
 select=dplyr::select
 map=maps::map
 
@@ -36,7 +37,7 @@ plot(nlcd_cropped)
 northeast_sf_crs_meters=st_transform(northeast_sf,crs=26918)
 # ggplot()+geom_sf(data=northeast_sf_crs_meters)
 
-#make a grid - takes a while to run so try 
+#make a grid 
 big_grid=st_make_grid(northeast_sf_crs_meters,5000,what = "centers") 
 grid=big_grid[northeast_sf_crs_meters] %>% st_transform(crs=st_crs(nlcd))
 
@@ -52,19 +53,18 @@ grid[1]
 square = st_sfc(st_buffer(grid[1], 1200,endCapStyle="SQUARE",joinStyle="MITRE"), crs = st_crs(nlcd))
 plot(nlcd[square], reset = FALSE,main="",axes=T)
 
-for(i in 1:6){
-    square = st_sfc(st_buffer(grid[i], 1200,endCapStyle="SQUARE",joinStyle="MITRE"), crs = st_crs(nlcd))
-    
-    plot(nlcd[square], reset = FALSE,main="",axes=T)
-    
-}
+# for(i in 1:6){
+#     square = st_sfc(st_buffer(grid[i], 1200,endCapStyle="SQUARE",joinStyle="MITRE"), crs = st_crs(nlcd))
+#     
+#     plot(nlcd[square], reset = FALSE,main="",axes=T)
+#     
+# }
 
 #loop through and calculate % forest, water, matrix and NA values
 # for each of the three scales
 
 #convert raster to forest/matrix/water
 landscape=nlcd[square]
-data.frame(landcsape) %>% rename()
 
 landscape %>% map(function(x) min(x))
 yy = adrop(landscape)
@@ -75,7 +75,7 @@ landscape_table[landscape_table !=0]
 #group the nlcd data into categories
 forest_cats=c("Woody Wetlands","Deciduous Forest",'Mixed Forest',"Evergreen Forest")
 water="Open Water"
-wetland="Emergent Herbaceuous Wetland"
+wetland="Emergent Herbaceuous Wetlands"
 null_vals=c("Unclassified" ,"")
 matrix_cats=unique(names(landscape_table))[!unique(names(landscape_table)) %in% c(forest_cats,water,wetland,null_vals)]
 
@@ -105,9 +105,183 @@ lu_summs=landscape_sizes %>% purrr::map(function(landscape_size){
         ) %>% 
             mutate(total_pixels=total_pixels,grid_index=i,size_m=landscape_size)
         
-    },otherwise=NULL) )
+    },otherwise=NULL) ,.options=furrr_options(seed=T))
 })
 
     
-summary(landscape_data)
+i=2
+
+lu_summs[[i]]
+
+#next measure edge
+landscape_size=landscape_sizes[1]
+the_edges=landscape_sizes %>% purrr::map(function(landscape_size){
+    1:length(grid)%>% future_map(possibly(function(i){
+    square = st_sfc(st_buffer(grid[i], landscape_size/2,endCapStyle="SQUARE",joinStyle="MITRE"), crs = st_crs(nlcd))
+    landscape=nlcd[square]
+    landscape_data=st_as_stars(landscape) # convert from stars_proxy object to stars object with all the data
+    
+    #group all the forest categories
+    landscape_data[[1]][landscape_data[[1]] %in% forest_cats & !is.na(landscape_data[[1]])] <- "Deciduous Forest" # group forest
+    
+    #group water and wetland
+    landscape_data[[1]][landscape_data[[1]] == wetland & !is.na(landscape_data[[1]])] <- "Open Water"
+    
+    #group everything else
+    landscape_data[[1]][landscape_data[[1]] %in% matrix_cats & !is.na(landscape_data[[1]])] <- "Cultivated Crops" 
+    
+    
+    lsm_c_ed(landscape_data)
+
+    },otherwise=NULL),.options=furrr_options(seed=T))
+})
+the_edges[[2]][10]
+#the tricky thing is, is that we don't care about forest edge with water
+#to get just forest edge subtract the water edge from the sum  of all edges
+# all edges = sum(value)/2
+
+#categories: 12=ice snow;42=evergreen forest;83 does not exist; #seems like it added 1 to the true categories?
+i=1
+square = st_sfc(st_buffer(grid[i], landscape_size/2,endCapStyle="SQUARE",joinStyle="MITRE"), crs = st_crs(nlcd))
+landscape=nlcd[square]
+plot(landscape)
+df=the_edges[[1]][[1]]
+ls
+fm_edge=the_edges %>% purrr::map(function(ls){
+    ls %>% purrr::map(possibly(function(df){
+        if(12 %in% df$class){
+            fm_edge=sum(df$value)/2-df[df$class==12,]$value
+            }
+        else{
+            sum(df$value)/2
+        }
+        
+        
+    },otherwise=NULL)) 
+})
+
+
+
+par(mfrow=c(1,3))
+for(i in 1:3){
+    test1=fm_edge[[i]]
+    a=lu_summs[[i]] %>% bind_rows %>% mutate(edge_density=test1)
+    keep_me=which(a$prop_water+a$prop_wetland <.05)
+    with(a[keep_me,], plot(prop_forest,edge_density,ylim=c(0,230)))
+    
+}
+lu_df=1:length(lu_summs) %>% purrr::map(function(i){
+    test1=fm_edge[[i]] %>% unlist
+    a=lu_summs[[i]] %>% bind_rows %>% mutate(edge_density=test1)
+    keep_me=which(a$prop_water+a$prop_wetland <.05)
+    
+    a[keep_me,]
+})
+lu_df2=lu_df %>% purrr::map(function(df){
+    df$f_cat=NA
+    df$edge_cat=NA
+    df$focal_landscape=F
+    for(f_cat in c(.1,.3,.5) ){
+        f_range=c(f_cat-.025,f_cat+0.025)
+        
+        #filter to only be landsacpes with f_cat amount of forest plus or minus 2.5 percent
+        df_ordered=df %>% 
+            filter(prop_forest > f_range[1] & prop_forest <f_range[2]) %>%
+            arrange(edge_density)
+        
+        #get the indices of the 15 landcapes with the least edge
+        # and the 15 with the most
+        low_edge_is=df_ordered[1:15,]$grid_index
+        high_edge_is=df_ordered[(nrow(df_ordered)-14):nrow(df_ordered),]$grid_index
+        
+        #modify df: label as a focal landscape, and give which forest size category its in
+        df[df$grid_index %in% low_edge_is | df$grid_index %in% high_edge_is,]$f_cat<-f_cat
+        df[df$grid_index %in% low_edge_is | df$grid_index %in% high_edge_is,]$focal_landscape<-T
+        
+        #modify df: label as high or 
+        df[df$grid_index %in% low_edge_is,]$edge_cat<-'low'
+        df[df$grid_index %in% high_edge_is,]$edge_cat<-'high'
+        
+    }
+    df
+    
+})
+
+# plot to make sure everything looks ok
+for(df in lu_df2){
+    with(df,plot(prop_forest,edge_density,col=ifelse(focal_landscape,'red','black')))
+}
+
+#get the maps of each of the focal_landscapes 
+hab_maps=1:length(lu_df2) %>% purrr::map(function(i){
+    df=lu_df2[[i]]
+    landscape_size=landscape_sizes[[i]]
+    get_these=df[df$focal_landscape,]$grid_index
+    
+    get_these %>% purrr::map(possibly(function(j){
+        square = st_sfc(st_buffer(grid[j], landscape_size/2,endCapStyle="SQUARE",joinStyle="MITRE"), crs = st_crs(nlcd))
+        landscape=nlcd[square]
+        
+        landscape_data=st_as_stars(landscape) # convert from stars_proxy object to stars object with all the data
+        
+        #group all the forest categories
+        landscape_data[[1]][landscape_data[[1]] %in% forest_cats & !is.na(landscape_data[[1]])] <- "Deciduous Forest" # group forest
+        
+        #group water and wetland
+        landscape_data[[1]][landscape_data[[1]] == wetland & !is.na(landscape_data[[1]])] <- "Open Water"
+        
+        #group everything else
+        landscape_data[[1]][landscape_data[[1]] %in% matrix_cats & !is.na(landscape_data[[1]])] <- "Cultivated Crops" 
+        
+        #now convert from a matrix to a df with x-y coordinates
+        long_df=1:ncol(landscape_data[[1]]) %>% purrr::map_dfr(function(x){
+            1:nrow(landscape_data[[1]]) %>% purrr::map_dfr(function(y){
+                data.frame(x=x,y=y,category=as.character(landscape_data[[1]][y,x]))
+            })
+        }) %>% filter(!is.na(category))
+        long_df[long_df$category=='Cultivated Crops',]$category='matrix'
+        long_df[long_df$category=='Deciduous Forest',]$category='forest'
+        long_df[long_df$category=='Open Water',]$category='water'
+        
+        long_df %>%
+            mutate(grid_index=j,landscape_size=landscape_size)
+        
+        },otherwise=NULL))
+    
+    })
+        
+        
+    
+
+
+
+head(lu_summs[[1]] %>% bind_rows)
+length(test1 %>% unlist)
+
+nrow(lu_summs[[1]] %>% bind_rows)
+test1 %>% purrr::map(function(df) is_empty(df))
+
+test1[[989]]
+
+the_edges[[1]][[989]]
+
+square = st_sfc(st_buffer(grid[i], landscape_size/2,endCapStyle="SQUARE",joinStyle="MITRE"), crs = st_crs(nlcd))
+landscape=nlcd[square]
+landscape_data=st_as_stars(landscape) # convert from stars_proxy object to stars object with all the data
+ls_tb=table(landscape_data[[1]])
+sum(ls_tb[ls_tb !=0])
+landscape_data %>% pull(1)
+head(matrix(landscape_data[[1]]))#[,1:3] #%in% forest_cats
+attr(landscape_data[[1]],'colors') <- NULL
+landscape_data[[1]]<-landscape_data[[1]] %in% forest_cats & !is.na(landscape_data[[1]])
+plot(landscape_data)
+is.na(landscape_data[[1]])
+
+#convert to forest/non-forest:
+landscape
+f_landscape
+forest_nonforest=landscape_data[[1]] %in% forest_cats
+forest_nonforest=landscape_data %>% st_apply(c('x','y'),function(x) x %in% forest_cats)
+plot(forest_nonforest,breaks='equal')
+lsm_c_ed
 
