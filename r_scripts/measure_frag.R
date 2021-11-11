@@ -213,12 +213,13 @@ for(df in lu_df2){
 }
 
 #get the maps of each of the focal_landscapes 
+plan(multisession,workers=4)
 hab_maps=1:length(lu_df2) %>% purrr::map(function(i){
     df=lu_df2[[i]]
     landscape_size=landscape_sizes[[i]]
     get_these=df[df$focal_landscape,]$grid_index
     
-    get_these %>% purrr::map(possibly(function(j){
+    get_these %>% future_map(possibly(function(j){
         square = st_sfc(st_buffer(grid[j], landscape_size/2,endCapStyle="SQUARE",joinStyle="MITRE"), crs = st_crs(nlcd))
         landscape=nlcd[square]
         
@@ -239,21 +240,30 @@ hab_maps=1:length(lu_df2) %>% purrr::map(function(i){
                 data.frame(x=x,y=y,category=as.character(landscape_data[[1]][y,x]))
             })
         }) %>% filter(!is.na(category))
-        long_df[long_df$category=='Cultivated Crops',]$category='matrix'
-        long_df[long_df$category=='Deciduous Forest',]$category='forest'
-        long_df[long_df$category=='Open Water',]$category='water'
+        
+        #change labeels to be shorter and more general
+        if('Cultivated Crops' %in% long_df$category) long_df[long_df$category=='Cultivated Crops',]$category='matrix'
+        if('Deciduous Forest' %in% long_df$category)long_df[long_df$category=='Deciduous Forest',]$category='forest'
+        if('Open Water' %in% long_df$category) long_df[long_df$category=='Open Water',]$category<-'water'
         
         long_df %>%
             mutate(grid_index=j,landscape_size=landscape_size)
         
-        },otherwise=NULL))
+        },otherwise=NULL),.options=furrr_options(seed=T))
     
     })
-        
-        
-    
+future:::ClusterRegistry("stop")
 
+        
+hab_maps %>% purrr::map(function(ls){
+    with(ls[[1]],plot(x,y,col=as.factor(category)))
 
+    })  
+
+# saveRDS(hab_maps,'hab_maps10nov2021.rds')
+# saveRDS(lu_df2,'lu_info10nov2021.rds')
+
+#old code
 
 head(lu_summs[[1]] %>% bind_rows)
 length(test1 %>% unlist)
