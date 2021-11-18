@@ -108,6 +108,7 @@ lu_summs=landscape_sizes %>% purrr::map(function(landscape_size){
     },otherwise=NULL) ,.options=furrr_options(seed=T))
 })
 
+
     
 i=2
 
@@ -170,10 +171,17 @@ for(i in 1:3){
     with(a[keep_me,], plot(prop_forest,edge_density,ylim=c(0,230)))
     
 }
+#get rid of landscapes overlapping the edge ofthe raster data [or where there is null raster data]
+#or where there is greater than 5% water/wetland
+remove_me=lu_summs %>% purrr::map(function(ls){
+    df=ls %>% bind_rows %>% filter(prop_null !=0 | (prop_wetland+prop_water)>0.05) 
+    df$grid_index
+}) %>% unlist %>% unique()
+
 lu_df=1:length(lu_summs) %>% purrr::map(function(i){
     test1=fm_edge[[i]] %>% unlist
     a=lu_summs[[i]] %>% bind_rows %>% mutate(edge_density=test1)
-    keep_me=which(a$prop_water+a$prop_wetland <.05)
+    keep_me=which(!a$grid_index %in% remove_me)
     
     a[keep_me,]
 })
@@ -213,7 +221,7 @@ for(df in lu_df2){
 }
 
 #get the maps of each of the focal_landscapes 
-plan(multisession,workers=4)
+plan(multisession,workers=5)
 hab_maps=1:length(lu_df2) %>% purrr::map(function(i){
     df=lu_df2[[i]]
     landscape_size=landscape_sizes[[i]]
@@ -260,8 +268,8 @@ hab_maps %>% purrr::map(function(ls){
 
     })  
 
-# saveRDS(hab_maps,'hab_maps10nov2021.rds')
-# saveRDS(lu_df2,'lu_info10nov2021.rds')
+# saveRDS(hab_maps,'processed_data/hab_maps18nov2021.rds')
+# saveRDS(lu_df2,'processed_data/lu_info18nov2021.rds')
 
 #old code
 
