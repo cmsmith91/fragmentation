@@ -2,14 +2,15 @@ rm(list=ls())
 library(tidyverse)
 library(vroom)
 library(furrr)
+map=purrr::map
 
 # setwd("~/Dropbox/Fall_2014/research/fragmentation/data")
 if(getwd() !="~/Dropbox/Fall_2014/Research/Fragmentation/fragmentation") setwd("~/Dropbox/Fall_2014/Research/Fragmentation/fragmentation")
 alt_path="~/Dropbox/Fall_2014/Research/Fragmentation/data/slurm-out"
 
-hab_maps=readRDS('processed_data/hab_maps10nov2021.rds')
+hab_maps=readRDS('processed_data/hab_maps18nov2021.rds')
 hab_maps_unlisted=hab_maps %>% unlist(recursive=F)
-edge=readRDS('processed_data/lu_info10nov2021.rds')
+edge=readRDS('processed_data/lu_info18nov2021.rds')
 focal_edge=edge %>% 
     map_dfr(function(df) df %>% filter(focal_landscape)) %>%
     mutate(landscape_id=1:n())
@@ -35,7 +36,7 @@ coord_df=data.frame(ind_coord=ind_coord,pixel_coord=pixel_coord,x,y)
 
 
 #set the number of coms per landscape
-n_coms=50#start with 5
+n_coms=100#start with 5
 n_landscapes=sum(hab_maps %>% map_int(length))
 replicates_needed=n_landscapes*n_coms #number of landscapes times n_coms
 
@@ -99,7 +100,7 @@ output=1:n_landscapes %>% future_map(function(i){
         
         data.frame(
             grid_index=f_map$grid_index[1],
-            landscape_size=f_map$landscape_size[1],
+            size_m=f_map$landscape_size[1],
             initial_rich=initial_rich,
             final_rich=final_rich,
             community=com_file_name
@@ -111,17 +112,55 @@ output=1:n_landscapes %>% future_map(function(i){
     
     },.options=furrr_options(seed=T)) %>% bind_rows
 future:::ClusterRegistry("stop")
+# saveRDS(output,"processed_data/loss_simulatin_output.rds")
 
-output_summ=output %>% group_by(grid_index,landscape_size) %>%
+output_summ=output %>% group_by(grid_index,size_m) %>%
     summarize(mean_percent_loss=mean(percent_loss),
               median_percent_loss=median(percent_loss)) %>% 
     left_join(focal_edge) %>% 
-    arrange(size_m)
-par(mfrow=c(1,3))
+    arrange(size_m) %>%
+    mutate(size_ha=size_m^2*0.0001)
+
+
+
+# pdf("figures/loss_sim_output1.pdf",width=13)
+par(mfrow=c(1,3),pch=16,cex=1.6)
 for(my_size in unique(output_summ$size_m)){
     plot_df=output_summ %>% filter(size_m==my_size)
     with(plot_df,
          plot(prop_forest,median_percent_loss,col=as.factor(edge_cat),
-              main=paste0('size = ', size_m[1]))
+              main=paste0('size = ', size_ha[1],' ha'),ylim=c(0,60))
          )
 }
+# dev.off()
+
+legend_labs=unique(plot_df$f_cat)[order(unique(plot_df$f_cat))]
+# pdf("figures/loss_sim_output2.pdf",width=13)
+par(mfrow=c(1,3),pch=16,cex=1.6)
+for(my_size in unique(output_summ$size_m)){
+    plot_df=output_summ %>% filter(size_m==my_size)
+    with(plot_df,
+         plot(edge_density,median_percent_loss,col=as.factor(f_cat),
+              main=paste0('size = ', size_ha[1],' ha'),ylim=c(0,60))
+    )
+    if(my_size==600){
+        legend('topright',legend=legend_labs,pch=16,col=as.factor(legend_labs),bty='n')
+    }
+}
+# dev.off()
+
+
+# dev.off()
+
+#now try plotting edge density v species loss with forest amount being different colors
+# pdf("figures/loss_sim_output1.pdf",width=13)
+par(mfrow=c(1,3),pch=16,cex=1.3)
+for(my_size in unique(output_summ$size_m)){
+    plot_df=output_summ %>% filter(size_m==my_size)
+    with(plot_df,
+         plot(prop_forest,median_percent_loss,col=as.factor(edge_cat),
+              main=paste0('size = ', size_m[1]),ylim=c(0,60))
+    )
+}
+# dev.off()
+
