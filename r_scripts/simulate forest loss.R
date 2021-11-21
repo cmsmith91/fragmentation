@@ -113,6 +113,7 @@ output=1:n_landscapes %>% future_map(function(i){
     },.options=furrr_options(seed=T)) %>% bind_rows
 future:::ClusterRegistry("stop")
 # saveRDS(output,"processed_data/loss_simulatin_output.rds")
+output=readRDS("processed_data/loss_simulatin_output.rds")
 
 output_summ=output %>% group_by(grid_index,size_m) %>%
     summarize(mean_percent_loss=mean(percent_loss),
@@ -133,21 +134,24 @@ for(my_size in unique(output_summ$size_m)){
          )
 }
 # dev.off()
-
+plot_df=output_summ %>% filter(size_m==600)
 legend_labs=unique(plot_df$f_cat)[order(unique(plot_df$f_cat))]
-# pdf("figures/loss_sim_output2.pdf",width=13)
-par(mfrow=c(1,3),pch=16,cex=1.6)
+legend_labs2=paste0(legend_labs*100,'%')
+
+pdf("figures/loss_sim_output2.pdf",width=13)
+par(mfrow=c(1,3),pch=16,cex=1.6,cex.main=1.3)
 for(my_size in unique(output_summ$size_m)){
     plot_df=output_summ %>% filter(size_m==my_size)
     with(plot_df,
-         plot(edge_density,median_percent_loss,col=as.factor(f_cat),
-              main=paste0('size = ', size_ha[1],' ha'),ylim=c(0,60))
+         plot(edge_density,100-median_percent_loss,col=as.factor(f_cat),
+              main=paste0(size_ha[1],' ha'),ylim=c(0,100),xlim=c(10,200),
+              ylab='% of species remaining',xlab='edge density (m/ha)')
     )
     if(my_size==600){
-        legend('topright',legend=legend_labs,pch=16,col=as.factor(legend_labs),bty='n')
+        legend('bottomright',cex=.8,legend=legend_labs2,title = 'forest remaining',pch=16,col=as.factor(legend_labs),bty='n')
     }
 }
-# dev.off()
+dev.off()
 
 
 # dev.off()
@@ -163,4 +167,26 @@ for(my_size in unique(output_summ$size_m)){
     )
 }
 # dev.off()
+
+#now try plotting edge density v species loss with forest amount being different colors
+pdf("figures/loss_sim_output3.pdf",width=13)
+par(mfrow=c(1,3),pch=16,cex=1.3,cex.lab=1.3)
+unique(output_summ$f_cat)
+for(my_propforest in legend_labs){
+    plot_df=output_summ %>% filter(f_cat==my_propforest)
+    plot_ls=plot_df %>% split(.$edge_cat) 
+    plot_df_highedge=plot_df %>% filter(edge_cat=='high')
+    plot_df_lowedge=plot_df %>% filter(edge_cat=='low')
+    
+    percentremaining_frag=100-plot_df_highedge$median_percent_loss
+    percentremaining_cont=100-plot_df_lowedge$median_percent_loss
+    percent_diff=100*(percentremaining_frag-percentremaining_cont)/percentremaining_frag
+    
+
+    with(plot_df_lowedge,
+         plot(size_ha,percent_diff,ylab='Species remaining: fragmented-continuous',
+              xlab="Size (ha)",main=paste0(my_propforest*100,'% forest remaining'))
+    )
+}
+dev.off()
 
