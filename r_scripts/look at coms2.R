@@ -1,8 +1,8 @@
 rm(list=ls())
 # setwd("~/Dropbox/Fall_2014/Research/Fragmentation/data/neutralmod_output_final")
-setwd("~/Dropbox/Fall_2014/Research/Fragmentation/data/neutral_output_final_again")
-setwd("/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/data/neutralmod_output_13dec2021-4")
-setwd("/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/data/neutralmod_output_13dec2021-4")
+# setwd("~/Dropbox/Fall_2014/Research/Fragmentation/data/neutral_output_final_again")
+# setwd("/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/data/neutralmod_output_13dec2021-4")
+setwd("/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/data/slurm-out")
 
 library(truncnorm)
 library(tidyverse)
@@ -10,6 +10,7 @@ library(vroom)
 library(vegan)
 library(furrr)
 map=purrr::map; select=dplyr::select
+
 
 ## get a vector of all the files
 files=list.files()
@@ -38,6 +39,12 @@ df=data.frame(spec=spec,global=global,size_pix=size_pix,size_ha=size_ha,size_m=s
 param_df=df
 param_sads=df %>% filter(props)
 param_coms=df %>% filter(!props)
+
+#check sample sizes
+head(param_coms)
+param_coms %>% filter(timestep==300000) %>%
+  group_by(spec,global) %>% summarize(n=n())
+
 ## load the bee data
 # load list of forest-associated bees
 fbee=read.csv("~/Dropbox/Fall_2014/Research/Fragmentation/data/forest_bees.csv") %>% 
@@ -132,7 +139,7 @@ div_df %>% filter(vary_spec &vary_global)
 par(mfrow=c(1,2),mar=c(4,5,5,1))
 for(i in unique(div_df$spec)){
     summ=div_df %>% filter(vary_spec & spec==i) %>% group_by(timestep) %>% 
-        summarize(rich=mean(richness),simp=mean(simpson),n=n())
+        summarize(rich=median(richness),simp=median(simpson),n=n())
     if(nrow(summ)>0){
         with(summ %>% filter(timestep !=1),
              plot(rich~timestep,ylim=c(0,max(rich)+max(rich)*.10),main=paste0('spec = ',i,
@@ -145,11 +152,11 @@ for(i in unique(div_df$spec)){
 }
 
 par(mfrow=c(1,2),mar=c(4,5,5,1),pch=16)
-globals=unique(div_df$global) 
+globals=unique(div_df[div_df$vary_global,]$global) 
 globals_ordered=globals[order(globals)]
 for(i in globals_ordered){
     summ=div_df %>% filter(vary_global & global==i) %>% group_by(timestep) %>% 
-        summarize(rich=mean(richness),simp=mean(simpson),n=n())
+        summarize(rich=median(richness),simp=median(simpson),n=n())
     with(summ %>% filter(timestep !=1),
          plot(rich~timestep,ylim=c(0,max(rich)+max(rich)*.10),main=paste0('global = ',round(i,6),
                                         '\n n = ',n[1])))
@@ -229,7 +236,7 @@ sum(coords$center_square)
 
 
 #now sub-sample from the center square to calculate richness
-max_time=150000 #only sample from the communities at the last timestep
+max_time=100000 #only sample from the communities at the last timestep
 set.seed(10)
 focal_reps=param_coms %>% filter(timestep==max_time)
 center_indices=which(coords$center_square)
@@ -257,6 +264,7 @@ spec_df=focal_coms %>% left_join(param_coms) %>%
     summarize(rich=median(rich),shan=median(shannon),simp=median(simpson),n=n())%>%
     mutate(vary_spec=round(global,5)==round(focal_global,5),vary_global=spec==focal_spec)
 
+
 #pdf('methods_param.pdf',width=11)
 par(mfrow=c(1,2),pch=16,cex=1.5)
 with(spec_df %>% filter(vary_spec ),plot(rich~spec,ylim=c(0,40)))
@@ -277,7 +285,6 @@ make_focal_spec=(exp(predicted_richness)-coef(spec_mod)[1])/coef(spec_mod)[2]
 
 #next measure beta div
 file_name=focal_reps$filename[[1]]
-plan(multisession,workers=6)
 beta_div=focal_reps$filename %>% future_map(function(file_name){
     full_com=vroom(file_name,delim="\"",col_names = F)
     sub_coms=1:nrow(center_coords) %>% map_dfr(function(i){
@@ -336,11 +343,27 @@ abline(h=(upper_jacc),col='red',lt=2)
 pick_spec_rich=spec_df %>% filter(vary_spec) %>% arrange(rich)
 in_btw=pick_spec_rich$rich >=lower_rich & pick_spec_rich$rich <=upper_rich#in btw lower and upper richness + 1 on each side
 fit_me=in_btw
-for(i in 1:length(in_btw)) {
+if(sum(fit_me) !=0){
+  for(i in 1:length(in_btw)) {
     if(in_btw[i] & length(in_btw[i-1]) !=0) fit_me[i-1] <- T
     if(in_btw[i] & length(in_btw[i+1]) !=0) fit_me[i+1] <- T
-}
+  }
+  
+  
+}else{
+  diff_lowerrich=lower_rich-pick_spec_rich$rich
+  only_smaller=which(diff_lowerrich>0)
+  which_below=which(diff_lowerrich==min(abs(diff_lowerrich[only_smaller])))
+
+  diff_upperrich=pick_spec_rich$rich-upper_rich
+  only_bigger=which(diff_lowerrich<0)
+  which_above=which(diff_upperrich==min(abs(diff_upperrich[only_bigger])))
+  
+  fit_me[c(which_below,which_above)]<-T
+  }
+#
 in_btw_sr=fit_me
+
 coefs_spec_rich=with(pick_spec_rich[fit_me,],coef(lm(rich~spec)))
 
 
@@ -356,7 +379,7 @@ coefs_global_rich=with(pick_global_rich[fit_me,],coef(lm(rich~log10(global))))
 
 
 #get x vals for plotting the bets fit liinw
-
+pick_spec_beta=beta_df %>% filter(vary_spec) %>% arrange(jaccard)
 spec_xs=seq(min(pick_spec_beta$spec),max(pick_spec_beta$spec),by=(max(pick_spec_beta$spec)-min(pick_spec_beta$spec))/1000)
 
 xs_sr=pick_spec_rich[in_btw_sr,]$spec#in_btw_gr
@@ -431,7 +454,7 @@ in_btw_gj=fit_me
 coefs_global_beta=with(pick_global_beta[fit_me,],coef(lm(jaccard~log10(global))))
 
 xs_gj=pick_global_beta[in_btw_gj,]$global
-glob_xs=log10(seq(min(xs_gj),10^(-1.9),by=(10^(-1.9)-min(xs_gj))/1000))
+glob_xs=log10(seq(min(xs_gj),max(xs_gj),by=(max(xs_gj)-min(xs_gj))/1000))
 glob_ys=coefs_global_beta[1]+coefs_global_beta[2]*glob_xs
 
 vals_spec_beta=exp(solve_me(coefs_spec_beta_loglog[1],coefs_spec_beta_loglog[2],c(log(lower_jacc),log(upper_jacc))))
@@ -452,8 +475,10 @@ lines(spec_xs,spec_ys,type='l',col='blue')
 # abline(v=final_min_spec)
 # abline(v=final_max_spec)
 
+# with(beta_df %>% filter(vary_global),
+#      plot(jaccard~log10(global),ylim=graph_lims,xlim=c(-3.1,-1.7)))
 with(beta_df %>% filter(vary_global),
-     plot(jaccard~log10(global),ylim=graph_lims,xlim=c(-3.1,-1.7)))
+     plot(jaccard~log10(global),ylim=graph_lims))
 abline(h=obs_jaccard,col='red')
 abline(h=(lower_jacc),col='red',lt=2)
 abline(h=(upper_jacc),col='red',lt=2)
@@ -467,7 +492,7 @@ lines(glob_xs,glob_ys,type='l',col='blue')
 
 
 #make pdf for supplement
-pdf('param_exploration.pdf',width=11)
+# pdf('param_exploration.pdf',width=11)
 par(mfrow=c(2,2),pch=16,cex=1.5,mar=c(2,4,1,.5))
 with(spec_df %>% filter(vary_spec & spec !=0.00022575) ,
      plot(rich~spec,ylim=c(0,30),xlab="",ylab='species richness'))
@@ -495,13 +520,13 @@ lines(spec_xs,spec_ys,type='l',col='blue')
 
 par(mar=c(4.3,2,1,.5))
 with(beta_df %>% filter(vary_global),
-     plot(jaccard~log10(global),ylim=graph_lims,xlim=c(-3.1,-1.7),
+     plot(jaccard~log10(global),ylim=graph_lims,
           xlab="log10(long-range dispersal)",ylab=""))
 abline(h=obs_jaccard,col='red')
 abline(h=(lower_jacc),col='red',lt=2)
 abline(h=(upper_jacc),col='red',lt=2)
 lines(glob_xs,glob_ys,type='l',col='blue')
-dev.off()
+# dev.off()
 
 
 #summarize everything
@@ -528,7 +553,7 @@ print(paste0("the minimum speciation value we'll use is ",final_min_spec," and
 print(paste0("the minimum global value we'll use is 10^",final_min_global," and
              the maximum global value we'll use is 10^",final_max_global))
 
-# (lower_rich-coefs_spec_rich[1])/coefs_spec_rich[2]
+# (lower_rich-coefs_spec_rich[1])/coifs_spec_rich[2]
 #plot everything
 
 min(spec)
