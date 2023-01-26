@@ -3,7 +3,7 @@ library(tidyverse)
 map=purrr::map
 
 #load data
-output=readRDS("processed_data/loss_simulation_n75_output.rds")
+output=readRDS("processed_data/loss_simulation_n100_output.rds")
 edge=readRDS('processed_data/lu_info03dec2021.rds')
 focal_edge=edge %>% 
     map_dfr(function(df) df %>% filter(focal_landscape)) %>%
@@ -12,71 +12,37 @@ focal_edge=edge %>%
 #format data
 output_summ=output %>% group_by(grid_index,size_m) %>%
     summarize(mean_percent_loss=mean(percent_loss),
-              median_percent_loss=median(percent_loss)) %>% 
+              median_percent_loss=median(percent_loss),mean_finalN=mean(final_n),median_finalN=median(final_n)) %>% 
     left_join(focal_edge) %>% 
     arrange(size_m) %>%
     mutate(size_ha=size_m^2*0.0001)%>%mutate(median_percent_remaining=100-median_percent_loss)
 
 set.seed(99)
-#Get the slope and intercepts of the relatioships between edge density and % species remaining. 
+# Get the slope and intercepts of the relationships between 
+# edge density and % species remaining.
+my_size = unique(output_summ$size_m)[1]
+my_f_cat = unique(output_summ$f_cat)[1]
 size_df=unique(output_summ$size_m) %>% map_dfr(function(my_size){
     df=output_summ %>% filter(size_m==my_size)
     unique(df$f_cat) %>% map_dfr(function(my_f_cat){
-        new_df = df %>% filter(f_cat==my_f_cat) %>%mutate(percent_remaining=100-median_percent_loss)
+        new_df = df %>% filter(f_cat==my_f_cat) %>%
+            mutate(percent_remaining=100-median_percent_loss)
         mod=with(new_df,lm(percent_remaining~edge_density))
         edge_relationship=coef(mod)
         conf_ints=confint(mod,"edge_density")
         lower=conf_ints[1]
         upper=conf_ints[2]
         
-        tibble(size_m=my_size,size_ha=my_size^2/10000,f_cat=my_f_cat,
-               edge_slope=edge_relationship[2],mod_intercept=edge_relationship[1],
+        tibble(size_m=my_size,size_ha=my_size^2/10000,
+               f_cat=my_f_cat,
+               edge_slope=edge_relationship[2],
+               mod_intercept=edge_relationship[1],
                lower_ci=lower,upper_ci=upper)
     })
     
 }) %>% mutate(size_ha_jit=jitter(size_ha))
 
-#next get min and max estiamted species remaining for each relationship
 
-#get lines for each value of forest area
-#start with 10% forest
-size_plot2=unique(output_summ$size_m) %>% map_dfr(function(my_size){
-    plot_df=output_summ %>% filter(size_m==my_size)
-    size_plot=size_df %>% filter(size_m==my_size)
-    
-    unique(plot_df$f_cat) %>% map_dfr(function(my_fcat){
-        new_df=size_plot[size_plot$f_cat==my_fcat,]
-        a=new_df$mod_intercept
-        b=new_df$edge_slope
-        
-        
-        #get min and max values for making sequence btw min and max
-        fcat_points=plot_df %>% filter(f_cat==my_fcat) 
-        min_x=min(fcat_points$edge_density); max_x=max(fcat_points$edge_density)
-        seq_x=c(min_x,max_x)
-        seq_y=a+b*seq_x
-        
-        new_df %>% mutate(min_x=min_x,max_x=max_x,lowedge_y=seq_y[1],highedge_y=seq_y[2]) %>%
-            mutate(percent_change_sp=(highedge_y-lowedge_y)*100/highedge_y)
-        
-    })
-    
-})
-    
-    
-max(size_plot2$percent_change_sp)
-min(size_plot2$percent_change_sp)
-
-
-size_plot2 %>% split(.$f_cat) %>% map_dbl(function(df) mean(df$percent_change_sp))
-
-size_plot2 %>% split(.$size_ha) %>% map_dbl(function(df) mean(df$percent_change_sp))
-with(size_plot2,plot(size_ha,percent_change_sp,col=as.factor(f_cat),pch=16))
-
-
-a=output_summ %>% split(.$size_ha)
-b=a[[1]] %>% split(.$f_cat)
-df2=b[[2]]
 #measure change as average diff
 diff_df=output_summ %>% split(.$size_ha) %>% map_dfr(function(df){
     df %>% split(.$f_cat) %>%  map_dfr(function(df2){
@@ -104,6 +70,17 @@ diff_df %>% filter(f_cat==0.1) %>% summarize(mean(avg_diff))
 diff_df %>% filter(f_cat==0.3) %>% summarize(mean(avg_diff))
 diff_df %>% filter(f_cat==0.5) %>% summarize(mean(avg_diff))
 
+#min and max differences at the different scales
+diff_df %>% filter(size_ha==min(size_ha)) %>% summarize(mean(avg_diff))
+diff_df %>% filter(size_ha==max(size_ha)) %>% summarize(mean(avg_diff))
+
+#differences in the slope between landscape sizes
+size_df %>% filter(size_ha==min(size_ha))%>% summarize(mean(edge_slope))
+size_df %>% filter(size_ha==max(size_ha))%>% summarize(mean(edge_slope))
+
+#what about differences in population size?
+output_summ %>% group_by(edge_cat) %>% summarize(mean(mean_finalN))
+
 
 my_cols=RColorBrewer::brewer.pal(8,'Paired')[c(7,2,4)]
 my_cols_lines=my_cols
@@ -114,17 +91,21 @@ legend_labs=unique(plot_df$f_cat)[order(unique(plot_df$f_cat))]
 legend_labs2=paste0(legend_labs*100,'%')
 my_pch = c(16,17,15)
 
-# pdf('figures/size_v_effectedge2.pdf',width=12)
+# pdf('figures/size_v_effectedge3.pdf',width=12)
+tiff('figures/size_v_effectedge.tiff', units="in", width=12, height=8, res=500, compression = 'lzw')
 par(mfrow=c(1,2),cex=1.6,mar=c(4.5,4,2,.9),oma=c(.2,.2,.2,.2))
-with(size_df,plot(size_ha_jit,edge_slope,col=my_cols_lines[as.factor(f_cat)],ylim=c(0,.27),ylab="edge effect: slope",xlab="landscape size (ha)",pch=my_pch[as.factor(f_cat)]))
+with(size_df,plot(size_ha_jit,edge_slope,col=my_cols_lines[as.factor(f_cat)],ylim=c(0,.37),ylab="edge density effect: slope",xlab="landscape size (ha)",pch=my_pch[as.factor(f_cat)]))
 with(size_df,arrows(x0=size_ha_jit,y0=lower_ci,y1=upper_ci,angle=90,length=0,col=my_cols_lines[as.factor(f_cat)]))
 legend('topright',cex=1,legend=legend_labs2,title = 'forest remaining',col=my_cols_lines[as.factor(legend_labs)],bty='n',pch=my_pch[as.factor(legend_labs)])
 
-with(diff_df,plot(size_ha_jit,avg_diff,col=my_cols_lines[as.factor(f_cat)],ylim=c(0,8),ylab="edge effect: mean difference",xlab="landscape size (ha)",pch=my_pch[as.factor(f_cat)]))
+with(diff_df,plot(size_ha_jit,avg_diff,col=my_cols_lines[as.factor(f_cat)],ylim=c(0,10),ylab="edge density effect: mean difference",xlab="landscape size (ha)",pch=my_pch[as.factor(f_cat)]))
 with(diff_df,arrows(size_ha_jit,lower_ci_diff,y1=upper_ci_diff,angle=90,length=0,col=my_cols_lines[as.factor(f_cat)]))
-# dev.off()
+ dev.off()
 
-pdf("figures/loss_sim_output2-08march2022.pdf",width=18)
+# pdf("figures/loss_sim_output2-08march2022.pdf",width=18)
+ tiff('figures/loss_sim_output2-08march2022.tiff', units="in", width=20, height=10, res=700, compression = 'lzw')
+tiff('figures/loss_sim_output2-08march2022.tiff', units="in", width=20, height=10, res=100, compression = 'lzw')
+
 cex_lab=1.3
 par(mfrow=c(1,5),pch=16,cex=1.4,cex.main=1.3,cex.lab=cex_lab,mar=c(4.1,2.5,2,.5))
 for(my_size in unique(output_summ$size_m)){
@@ -182,5 +163,5 @@ for(my_size in unique(output_summ$size_m)){
     }
     
 }
-dev.off()
+ dev.off()
 
