@@ -1,6 +1,5 @@
 rm(list=ls())
-setwd("~/Dropbox/Fall_2014/Research/Fragmentation/data/neutralmod_output_22may2021")
-setwd("~/Dropbox/Fall_2014/Research/Fragmentation/data/neutralmod_output_25may2021")
+setwd("~/Dropbox/Fall_2014/Research/Fragmentation/data/neutralmod_output_final")
 
 library(truncnorm)
 library(tidyverse)
@@ -9,8 +8,15 @@ library(vegan)
 library(furrr)
 map=purrr::map; select=dplyr::select
 
-## extract parameter info from the file name
+## get a vector of all the files
 files=list.files()
+if(grepl('txt',files)[1]==F){
+   files=files %>% map(function(f_name){
+       paste0(f_name,"/",list.files(f_name))
+   }) %>% unlist
+}
+
+## extract parameter info from the file name
 global=as.numeric(gsub("_size.*","",gsub(".*_global",'',files)))
 rep=as.numeric(gsub('.*rep','',gsub('timesteps.*','',files)))
 spec=as.numeric(gsub("_global.*","",gsub('.*spec','',files)))
@@ -50,6 +56,11 @@ local_all = fbees_allsites %>%
               shan=exp(diversity(n,'shannon')),simp=diversity(n,'invsimpson')) %>%
     left_join(sites)
 
+#get number of individuals, species and % id'd to the species level
+fbee_sad=fbees_allsites %>% group_by(genus_species) %>% summarize(n=n())
+print(paste("the number of forest-associated bee species in the data is",nrow(fbee_sad)))
+print(paste("the number of forest-associated bee individuals in the data is",sum(fbee_sad$n)))
+fbee_sad[fbee_sad$genus_species=="Nomada_bidentate_group",]$n/sum(fbee_sad$n)*100
 #Fit a GLM with richness as the response and forest cover as the predictor
 with(local_all,plot(forest500,rich))
 rich_mod=glm(rich~forest500,family='poisson',data=local_all)
@@ -85,31 +96,41 @@ with(local_all,plot(forest500,log(abund))) #plot
 mod_abund=lm(abund~forest500,data=local_all)
 # Use the model to predict bee abundance in a landscape with 100% forest cover 
 predict_abund=as.numeric(coef(mod_abund)[1]+coef(mod_abund)[2]*1)
+
 sigma_abund=sigma(mod_abund)
 
 coef(summary(mod_abund))
-
-
+predict_abund/(pi*400^2/10000)
+predict_abund/(pi*185^2/10000)
+21*.09
 # load simulated data and look at how div changes with each timestep
 #calculate the diversity of each community
-coms=list.files() %>% map(function(file_name) vroom(file_name,delim="\"",col_names = F))
+plan(multisession,workers=6)
+coms=files %>% future_map(function(file_name) vroom(file_name,delim="\"",col_names = F))
 #Error: Unknown TZ UTC
 
-plan(multisession,workers=6)
 div=coms %>% future_map(function(df){
     tab=table(df$X1)
     data.frame(
         richness=length(tab),
                shannon=exp(diversity(tab)),
                simpson=diversity(tab,'invsimpson'))
-    
+
 })
+# div=coms %>% map(function(df){
+#     tab=table(df$X1)
+#     data.frame(
+#         richness=length(tab),
+#         shannon=exp(diversity(tab)),
+#         simpson=diversity(tab,'invsimpson'))
+#     
+# })
 focal_spec=as.numeric(names(table(spec)[order(table(spec),decreasing=T)])[1])
 focal_global=as.numeric(names(table(global)[order(table(global),decreasing=T)])[1])
 
 div_df=div %>% bind_rows %>% bind_cols(df) %>%
     arrange(desc(spec),desc(global)) %>%
-    mutate(vary_spec=global==focal_global,vary_global=spec==focal_spec)
+    mutate(vary_spec=round(global,5)==round(focal_global,5),vary_global=spec==focal_spec)
 
 par(mfrow=c(3,3),mar=c(4,5,5,1))
 for(i in unique(div_df$spec)){
@@ -120,11 +141,13 @@ for(i in unique(div_df$spec)){
                                         '\n n = ',n[1])))
 }
 par(mfrow=c(3,3),mar=c(4,5,5,1))
-for(i in unique(div_df$global)){
+globals=unique(div_df$global) 
+globals_ordered=globals[order(globals)]
+for(i in globals_ordered){
     summ=div_df %>% filter(vary_global & global==i) %>% group_by(timestep) %>% 
         summarize(rich=mean(richness),n=n())
     with(summ %>% filter(timestep !=1),
-         plot(rich~timestep,main=paste0('global = ',i,
+         plot(rich~timestep,main=paste0('global = ',round(i,6),
                                         '\n n = ',n[1])))
 }
 
@@ -143,11 +166,12 @@ individual_indices_p=(1:(size_xy^2*dens))-1 #python: indices range from 0:(n-1)
 # from these, get the indices of pixels in 1d list
 pixel_indices=as.integer(individual_indices_p/dens)
 
+
 #then get indices of rows and columns for each pixel
 coords1=data.frame(x=pixel_indices%%size_xy,y=as.integer(pixel_indices/size_xy)) 
 
 # next, set the assumed foraging radius (in m)
-foraging_radius=500
+foraging_radius=185
 #calculate the area of a circle with that radius
 #and take the square root to get the length of size of a square in m
 foraging_dist_square=sqrt(pi*foraging_radius^2)
@@ -191,12 +215,12 @@ coords$col_quadrants=ifelse(is.na(coords$quadrant),'gray',as.factor(coords$quadr
 coords$col_center=ifelse(coords$center_square,4,'gray')
 # plot to make sure the code worked
 cex_pt=.7
- pdf('~/Dropbox/Fall_2014/Research/Fragmentation/data/sampling_areas.pdf',width=13)
+# pdf('~/Dropbox/Fall_2014/Research/Fragmentation/data/sampling_areas.pdf',width=13)
 par(mfrow=c(1,2),pch=15,cex=.8,mar=c(5.1,5.1,4.1,2.1),cex.lab=2.4,cex.axis=2)
 with(coords,plot(x,y,col=col_center,asp=1,main="",xlab='x coordinate',ylab='y coordinate'))
 with(coords ,plot(x,y,col=col_quadrants,asp=1,xlab='x coordinate',ylab='y coordinate',
                   main = "")) #double check the code worked
- dev.off()
+ # dev.off()
 
 #now sub-sample from the center square to calculate richness
 max_time=200000 #only sample from the communities at the last timestep
@@ -243,7 +267,7 @@ coms_beta=focal_reps$filename %>% map_dfr(function(file_name){
         
         quad_indices=which(coords$quadrant==i)
         quad_com=full_com[quad_indices,]
-        com=quad_com[sample(1:length(quad_com),size=bee_abund)]
+        com=quad_com[sample(1:length(quad_com),size=bee_abund,replace=T)]
         sad=table(com) 
         data.frame(sad) %>% rename(species=com,n=Freq) %>% 
             mutate(quad=i) 

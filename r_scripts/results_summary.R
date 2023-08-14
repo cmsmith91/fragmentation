@@ -78,6 +78,8 @@ diff_df %>% filter(size_ha==max(size_ha)) %>% summarize(mean(avg_diff))
 size_df %>% filter(size_ha==min(size_ha))%>% summarize(mean(edge_slope))
 size_df %>% filter(size_ha==max(size_ha))%>% summarize(mean(edge_slope))
 
+#absolute range?
+range(size_df$edge_slope)
 #what about differences in population size?
 output_summ %>% group_by(edge_cat) %>% summarize(mean(mean_finalN))
 
@@ -92,7 +94,7 @@ legend_labs2=paste0(legend_labs*100,'%')
 my_pch = c(16,17,15)
 
 # pdf('figures/size_v_effectedge3.pdf',width=12)
-tiff('figures/size_v_effectedge.tiff', units="in", width=12, height=8, res=500, compression = 'lzw')
+#tiff('figures/size_v_effectedge.tiff', units="in", width=12, height=8, res=500, compression = 'lzw')
 par(mfrow=c(1,2),cex=1.6,mar=c(4.5,4,2,.9),oma=c(.2,.2,.2,.2))
 with(size_df,plot(size_ha_jit,edge_slope,col=my_cols_lines[as.factor(f_cat)],ylim=c(0,.37),ylab="edge density effect: slope",xlab="landscape size (ha)",pch=my_pch[as.factor(f_cat)]))
 with(size_df,arrows(x0=size_ha_jit,y0=lower_ci,y1=upper_ci,angle=90,length=0,col=my_cols_lines[as.factor(f_cat)]))
@@ -100,11 +102,11 @@ legend('topright',cex=1,legend=legend_labs2,title = 'forest remaining',col=my_co
 
 with(diff_df,plot(size_ha_jit,avg_diff,col=my_cols_lines[as.factor(f_cat)],ylim=c(0,10),ylab="edge density effect: mean difference",xlab="landscape size (ha)",pch=my_pch[as.factor(f_cat)]))
 with(diff_df,arrows(size_ha_jit,lower_ci_diff,y1=upper_ci_diff,angle=90,length=0,col=my_cols_lines[as.factor(f_cat)]))
- dev.off()
+# dev.off()
 
 # pdf("figures/loss_sim_output2-08march2022.pdf",width=18)
- tiff('figures/loss_sim_output2-08march2022.tiff', units="in", width=20, height=10, res=700, compression = 'lzw')
-tiff('figures/loss_sim_output2-08march2022.tiff', units="in", width=20, height=10, res=100, compression = 'lzw')
+# tiff('figures/loss_sim_output2-08march2022.tiff', units="in", width=20, height=10, res=700, compression = 'lzw')
+tiff('figures/loss_sim_output2-14aug2023.tiff', units="in", width=20, height=10, res=100, compression = 'lzw')
 
 cex_lab=1.3
 par(mfrow=c(1,5),pch=16,cex=1.4,cex.main=1.3,cex.lab=cex_lab,mar=c(4.1,2.5,2,.5))
@@ -118,7 +120,7 @@ for(my_size in unique(output_summ$size_m)){
         par(oma=c(.5,1.5,1,1))
         with(plot_df,
              plot(edge_density,100-median_percent_loss,col=my_cols[as.factor(f_cat)],pch=my_pch[as.factor(f_cat)],
-                  main=paste0(size_ha[1],' ha'),ylim=c(0,100),xlim=c(10,200),
+                  main=paste0(size_ha[1],' ha'),ylim=c(50,100),xlim=c(10,200),
                   ylab='',xlab='')
         )
         mtext('% species remaining', side = 2, line = 0, outer = T,cex=1.9,adj=.6)
@@ -128,7 +130,7 @@ for(my_size in unique(output_summ$size_m)){
         
         with(plot_df,
              plot(edge_density,100-median_percent_loss,col=my_cols[as.factor(f_cat)],pch=my_pch[as.factor(f_cat)],
-                  main=paste0(size_ha[1],' ha'),ylim=c(0,100),xlim=c(10,200),
+                  main=paste0(round(size_ha[1]),' ha'),ylim=c(50,100),xlim=c(10,200),
                   ylab='',xlab='edge density (m/ha)')
         )
         
@@ -137,7 +139,7 @@ for(my_size in unique(output_summ$size_m)){
         
         with(plot_df,
              plot(edge_density,100-median_percent_loss,col=my_cols[as.factor(f_cat)],pch=my_pch[as.factor(f_cat)],
-                  main=paste0(size_ha[1],' ha'),ylim=c(0,100),xlim=c(10,200),
+                  main=paste0(round(size_ha[1]),' ha'),ylim=c(50,100),xlim=c(10,200),
                   ylab='',xlab='')
         )
         

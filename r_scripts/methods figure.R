@@ -1,10 +1,13 @@
 rm(list=ls())
+pardefault <- par()
+
 library(tidyverse)
 library(vroom)
 library(furrr)
 library(RColorBrewer)
 library(mapdata)
 library(sf)
+library(ggspatial)
 map=maps::map
 
 #cols for plotting
@@ -17,7 +20,7 @@ col_df1=data.frame('species'=1:length(col_list2),col = rev(col_list2),stringsAsF
 if(getwd() !="~/Dropbox/Fall_2014/Research/Fragmentation/fragmentation") setwd("~/Dropbox/Fall_2014/Research/Fragmentation/fragmentation")
 alt_path="~/Dropbox/Fall_2014/Research/Fragmentation/data/slurm-out"
 
-hab_maps=readRDS('processed_data/hab_maps18nov2021.rds')
+hab_maps=readRDS('processed_data/hab_maps03dec2021.rds')
 a=hab_maps %>% unlist(recursive=F)
 df=a[[1]]
 hab_maps_unlisted=hab_maps %>% unlist(recursive=F) %>%
@@ -27,7 +30,7 @@ hab_maps_unlisted=hab_maps %>% unlist(recursive=F) %>%
         df$y=rep(1:max_xy,max_xy)
         return(df)
     })
-edge=readRDS('processed_data/lu_info18nov2021.rds')
+edge=readRDS('processed_data/lu_info03dec2021.rds')
 focal_edge=edge %>% 
     map_dfr(function(df) df %>% filter(focal_landscape)) %>%
     mutate(landscape_id=1:n())
@@ -92,29 +95,26 @@ with(lowedge_ls,plot(x,y,col=color,pch=15,xlab='',ylab=''))
 with(highedge_ls,plot(x,y,col=color,pch=15,xlab='',ylab=''))
 
 
-#now upload 2 comminities
+#now upload 1 community 
 #get path names of all the communities
-com1=vroom(path_names[1],delim=" ",col_names=c('species')) 
-com2=vroom(path_names[9],delim=" ",col_names=c('species'))
-
+com1=vroom(path_names[3],delim=" ",col_names=c('species'))
 
 #
 n_distinct(com1$species)
-n_distinct(com2$species)
 
 #
 sp_map=com1
 unique_sp=sp_map %>% group_by(species) %>% summarize(n=n()) %>% arrange(desc(n))
 unique_cols=unique_sp %>%
-     mutate(species2 = 1:nrow(unique_sp)) %>% left_join(col_df2 %>% rename(species2=species))
+     mutate(species2 = 1:nrow(unique_sp)) %>% left_join(col_df1 %>% rename(species2=species))
 plot_df1=sp_map %>% left_join(unique_cols %>% select(species,col)) %>%
     mutate(ind_coord=1:n()) %>% left_join(coord_df)
 
-sp_map=com2
-unique_sp=sp_map %>% group_by(species) %>% summarize(n=n()) %>% arrange(desc(n))
+sp_map2=com1
+unique_sp=sp_map2 %>% group_by(species) %>% summarize(n=n()) %>% arrange(desc(n))
 unique_cols=unique_sp %>%
     mutate(species2 = 1:nrow(unique_sp)) %>% left_join(col_df1 %>% rename(species2=species))
-plot_df2=sp_map %>% left_join(unique_cols %>% select(species,col)) %>%
+plot_df2=sp_map2 %>% left_join(unique_cols %>% select(species,col)) %>%
     mutate(ind_coord=1:n()) %>% left_join(coord_df)
 
 par(mfrow=c(1,2),cex=.4,pch=15,pty="s",xaxt='n',yaxt='n')
@@ -144,8 +144,8 @@ par(mfrow(1,2))
 with(loss_plot1,plot(jitter(x),jitter(y),col=col,xlab='',ylab=''))
 with(loss_plot2,plot(jitter(x),jitter(y),col=col,xlab='',ylab=''))
 
- pdf('figures/methods_fig.pdf',width=12,height=8)
-par(mfcol=c(2,3),mar=c(.2,.2,3.5,.2),pty="s",pch=15,cex=.75,yaxt="n",xaxt='n',cex.main=4)
+pdf('figures/methods_fig-24july2022.pdf',width=12,height=8)
+par(mfcol=c(2,3),mar=c(.2,.2,3.5,.2),pty="s",pch=15,cex=.59,yaxt="n",xaxt='n',cex.main=4)
 #forest landscapes
 with(lowedge_ls,plot(x,y,col=color,pch=15,xlab='',ylab='',main='low edge'))
 with(highedge_ls,plot(x,y,col=color,pch=15,xlab='',ylab='',main='high edge'))
@@ -157,8 +157,10 @@ with(plot_df2,plot(jitter(x),jitter(y),col=col,xlab='',ylab='',main=paste0(highe
 #coms after forest loss
 with(loss_plot1,plot(jitter(x),jitter(y),col=col,xlab='',ylab='',main=paste0(lowedge_after,' species')))
 with(loss_plot2,plot(jitter(x),jitter(y),col=col,xlab='',ylab='',main=paste0(highedge_after,' species')))
- dev.off()
+dev.off()
 
+
+par(pardefault)
 ##now add map
 #get shapefile of northeastern US
 northeast_us=tolower(c("Maine", "Vermont", "New Hampshire", "Massachusetts", "Rhode Island", "Connecticut", "New York", "Pennsylvania", 
@@ -175,21 +177,25 @@ big_grid2=st_make_grid(northeast_sf_crs_meters,10000,what = "centers")
 grid=big_grid[northeast_sf_crs_meters] 
 grid2=st_transform(grid,crs = 4326)
 
-#old
-#load the data for the map of the northeastern US
+# old
+# load the data for the map of the northeastern US
 test <- map("world2Hires",region=c("USA","Canada"),fill=T,plot=F)
 test$x <- test$x-360
 test2 = st_as_sf(test, crs = 4326)
 #get state lines
 states <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
 
+par(mfrow=c(1,1))
+# RColorBrewer::display.brewer.all(colorblindFriendly = T)
+cols_for_map=adjustcolor(RColorBrewer::brewer.pal(5,'Dark2'),.5)
+adjustcolor(cols_for_map,.5)
 ########
 region_map=ggplot(data=test2) +
-    geom_sf(fill='honeydew1') +
+    geom_sf(fill='antiquewhite') +
     geom_sf(data = states, fill = NA)+
     coord_sf(crs = st_crs(4326),
              xlim = c(-82,-66.7), 
-             ylim = c(37.5,47.5), expand = FALSE)+
+             ylim = c(36.5,48.2), expand = FALSE)+
     theme_bw()+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
     xlab("Longitude") + 
     ylab("Latitude")
@@ -202,31 +208,52 @@ lat_lon2=data.frame(st_coordinates(grid2)) %>% rename(longitude=X,latitude=Y)%>%
 lat_lon_focal2400=focal_edge %>% filter(size_m==2400) %>%
     select(f_cat,edge_cat,grid_index) %>%
     left_join(lat_lon2) %>%
-    mutate(color=ifelse(edge_cat=='low','darkgreen','darkred'),
+    mutate(color=ifelse(edge_cat=='low',cols_for_map[5],cols_for_map[2]), #low edge is green and high edge is orange/red
            shape=ifelse(grid_index %in% c(highedge_gridindex,lowedge_gridindex),17,16),
            size=ifelse(grid_index %in% c(highedge_gridindex,lowedge_gridindex),4,2.5))
 # 
 grid_sites_over_region2400=region_map+    
-        geom_point(data = lat_lon_focal2400, aes(x=longitude,y=latitude),
-                   col=lat_lon_focal2400$color,shape=lat_lon_focal2400$shape,
-                   size=lat_lon_focal2400$size)+
+        geom_point(data = lat_lon_focal2400 , aes(x=longitude,y=latitude,
+                   fill=color),shape=21,
+                   size=2)+
     theme(text = element_text(size=35),
+          panel.background = element_rect(fill = "aliceblue"),
           axis.text.x = element_text(size = 17),
-          axis.text.y = element_text(size = 17))
+          axis.text.y = element_text(size = 17),
           
-pdf('figures/map_fig1.pdf')
+          legend.position=c(.84,.1),
+          
+          # Change background color underneath legend keys
+          legend.key = element_rect("transparent", color=NA),
+          legend.background = element_rect('transparent', color=NA, size=1),
+          
+          # Change font size of legend text, title 
+          legend.text = element_text(size=16),
+          legend.title = element_text(size=12),
+          #remove legend margin
+          legend.margin = margin(0, 0, 0, 0, "cm"))+
+    #modify manually fill of points in map, plus the color, fill, shape of points in legend/guide
+    scale_fill_manual(name = "", labels = c('low edge',"high edge"),
+                      values=c(cols_for_map[5],cols_for_map[2]),
+                      guide = guide_legend(override.aes = list(size = c(3.2,3.2),
+                                                               fill=c(cols_for_map[5],cols_for_map[2]),
+                                                               shape=21
+                                                               
+                      )))
+          
+# pdf('figures/map_fig1.pdf',height=10)
 grid_sites_over_region2400
-dev.off()
+# dev.off()
 
 
 lat_lon_focal1500=focal_edge %>% filter(size_m==1500) %>%
     select(f_cat,edge_cat,grid_index) %>%
     left_join(lat_lon2) %>%
-    mutate(color=ifelse(edge_cat=='low','darkgreen','darkred'))
+    mutate(color=ifelse(edge_cat=='low',cols_for_map[3],cols_for_map[5]))
 lat_lon_focal600=focal_edge %>% filter(size_m==600) %>%
     select(f_cat,edge_cat,grid_index) %>%
     left_join(lat_lon2) %>%
-    mutate(color=ifelse(edge_cat=='low','darkgreen','darkred'))
+    mutate(color=ifelse(edge_cat=='low',cols_for_map[1],cols_for_map[2]))
 
 (grid_sites_over_region2400=region_map+    
         geom_point(data = lat_lon_focal2400, aes(x=longitude,y=latitude),size=.9,col=lat_lon_focal2400$color))

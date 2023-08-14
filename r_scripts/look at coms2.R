@@ -2,7 +2,10 @@ rm(list=ls())
 # setwd("~/Dropbox/Fall_2014/Research/Fragmentation/data/neutralmod_output_final")
 # setwd("~/Dropbox/Fall_2014/Research/Fragmentation/data/neutral_output_final_again")
 # setwd("/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/data/neutralmod_output_13dec2021-4")
-setwd("/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/data/slurm-out")
+setwd("/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/data/slurm-out_varyparam_14march2022")
+source('/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/data/PairwiseDistanceFuns.R')
+# setwd("/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/data/slurm-out-varyparam")
+
 
 library(truncnorm)
 library(tidyverse)
@@ -22,8 +25,13 @@ if(grepl('txt',files)[1]==F){
 #get rid of slurm files
 files=files[!grepl('slurm',files)]
 
+
+# files=files[!grepl("17879421",files) | grepl(17879421,files) | grepl(17919260,files)]
+
+
 ## make column for the files with proportions (have "_props" in file name)
 ## vs files with locations of each individual
+folder=gsub('/.*','',files)
 global=as.numeric(gsub("_size.*","",gsub(".*_global",'',files)))
 rep=as.numeric(gsub('.*rep','',gsub('timesteps.*','',files)))
 spec=as.numeric(gsub("_global.*","",gsub('.*spec','',files)))
@@ -35,15 +43,36 @@ size_ha=(size_pix*30)^2/10000
 size_m=size_pix*30
 props=grepl("_props",files)
 df=data.frame(spec=spec,global=global,size_pix=size_pix,size_ha=size_ha,size_m=size_m,
-              density=density,rep=rep,timestep=timestep,props=props,filename=files)
-param_df=df
-param_sads=df %>% filter(props)
-param_coms=df %>% filter(!props)
+              density=density,rep=rep,timestep=timestep,props=props,folder,unique_rep=paste(folder,rep,spec,global,sep="_"),filename=files)
+
+#we just want the first 500 replicates for each timestep
+the_timestep=200000
+a=df %>% filter(timestep==the_timestep) %>% group_by(global,spec,timestep) %>%  
+  summarize(n=n_distinct(unique_rep)) %>% 
+  split(1:nrow(.))
+params=a[[1]]
+
+n_reps=500
+the_timestep=200000
+focal_reps=df %>% filter(timestep==the_timestep) %>% group_by(global,spec,timestep) %>%  
+  summarize(n=n_distinct(unique_rep)) %>% 
+  split(1:nrow(.)) %>% map(function(params){
+    reps_u=df %>% filter(spec==params$spec & global==params$global &timestep==the_timestep) %>% distinct(unique_rep) 
+    return(reps_u$unique_rep[1:n_reps])
+    
+  }) %>% unlist
+names(focal_reps) <-NULL
+
+param_df=df %>% filter(unique_rep %in% focal_reps) 
+param_sads=param_df %>% filter(props)
+param_coms=param_df %>% filter(!props)
 
 #check sample sizes
 head(param_coms)
-param_coms %>% filter(timestep==300000) %>%
+param_coms %>% filter(timestep==200000) %>%
   group_by(spec,global) %>% summarize(n=n())
+
+
 
 ## load the bee data
 # load list of forest-associated bees
@@ -72,17 +101,28 @@ fbee_sad=fbees_allsites %>% group_by(genus_species) %>% summarize(n=n())
 print(paste("the number of forest-associated bee species in the data is",nrow(fbee_sad)))
 print(paste("the number of forest-associated bee individuals in the data is",sum(fbee_sad$n)))
 fbee_sad[fbee_sad$genus_species=="Nomada_bidentate_group",]$n/sum(fbee_sad$n)*100
+
 #Fit a GLM with richness as the response and forest cover as the predictor
 with(local_all,plot(forest500,rich))
 rich_mod=glm(rich~forest500,family='poisson',data=local_all)
 rich_mod_lm=lm(rich~forest500,data=local_all)
+
+#what is the range of forest cover in the data?
+summary(local_all$forest500)
+
+#how many sites with 100% forest cover
+local_all$forest500
+
+
+
+####
 
 # Use the model to predict bee richness in a landscape with 100% forest cover 
 (predicted_richness=exp(as.numeric(coef(rich_mod)[1]+coef(rich_mod)[2]*1)))
 (predicted_richness2=as.numeric(coef(rich_mod_lm)[1]+coef(rich_mod_lm)[2]*1))
 
 #get the ci around the model prediction
-# https://fromthebottomoftheheap.net/2017/05/01/glm-prediction-intervals-i/
+# httsps://fromthebottomoftheheap.net/2017/05/01/glm-prediction-intervals-i/
 # a Wald confidence interval on the fitted function based on the standard 
 # errors of the estimates of the model coefficients
 p <- predict(rich_mod, newdata = data.frame(forest500 = 1), se.fit=TRUE)
@@ -116,16 +156,19 @@ predict_abund/(pi*185^2/10000)
 21*.09
 # load simulated data and look at how div changes with each timestep
 #load the props_files
-plan(multisession,workers=6)
-sads=param_sads$filename %>% 
-    future_map(function(file_name) {
-        df=vroom(file_name,delim="\"",col_names = F)
-        tab=df$X1
-        data.frame(
-            richness=length(tab),
-            shannon=exp(diversity(tab)),
-            simpson=diversity(tab,'invsimpson'))
-        })
+# plan(multisession,workers=4)
+# sads=param_sads$filename %>%
+#     future_map(function(file_name) {
+#         df=vroom(file_name,delim="\"",col_names = F)
+#         tab=df$X1
+#         data.frame(
+#             richness=length(tab),
+#             shannon=exp(diversity(tab)),
+#             simpson=diversity(tab,'invsimpson'))
+#         })
+#saveRDS(sads,'/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/fragmentation/processed_data/sads_14march2022.rds')
+
+sads=readRDS('/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/fragmentation/processed_data/sads_14march2022.rds')
 
 focal_spec=as.numeric(names(table(spec)[order(table(spec),decreasing=T)])[1])
 focal_global=as.numeric(names(table(global)[order(table(global),decreasing=T)])[1])
@@ -150,6 +193,7 @@ for(i in unique(div_df$spec)){
     }
     
 }
+
 
 par(mfrow=c(1,2),mar=c(4,5,5,1),pch=16)
 globals=unique(div_df[div_df$vary_global,]$global) 
@@ -225,6 +269,7 @@ coords$col_quadrants=ifelse(is.na(coords$quadrant),'gray',as.factor(coords$quadr
 coords$col_center=ifelse(coords$center_square,4,'gray')
 # plot to make sure the code worked
 cex_pt=.7
+
 # pdf('~/Dropbox/Fall_2014/Research/Fragmentation/data/sampling_areas.pdf',width=13)
 par(mfrow=c(1,2),pch=15,cex=.8,mar=c(5.1,5.1,4.1,2.1),cex.lab=2.4,cex.axis=2)
 with(coords,plot(x,y,col=col_center,asp=1,main="",xlab='x coordinate',ylab='y coordinate'))
@@ -235,76 +280,102 @@ with(coords ,plot(x,y,col=col_quadrants,asp=1,xlab='x coordinate',ylab='y coordi
 sum(coords$center_square)
 
 
+
 #now sub-sample from the center square to calculate richness
 max_time=100000 #only sample from the communities at the last timestep
 set.seed(10)
 focal_reps=param_coms %>% filter(timestep==max_time)
 center_indices=which(coords$center_square)
+par(mfrow=c(1,1))
+hist(focal_reps$spec)
+# focal_reps=focal_reps %>% filter(spec<.000242 & global>.09 & global<.11)
 
-file_name=focal_reps$filename[1] #for debugging map function
-focal_coms=focal_reps$filename %>% map_dfr(function(file_name){
+file_name=tail(focal_reps$filename)[1]
+# file_name=focal_reps$filename[1] #for debugging map function
+set.seed(150)
+focal_coms=focal_reps$filename %>% map_dfr(possibly(function(file_name){
     full_com=vroom(file_name,delim="\"",col_names = F)
-    
-    bee_abund=rtruncnorm(1, a=0, mean = predict_abund , sd = sigma_abund)
+
+    (bee_abund=rtruncnorm(1, a=0, mean = predict_abund , sd = sigma_abund))
     half_dist_pixels=ceiling(sqrt(bee_abund/density[1])/2)
-    center_indices=which(coords$x< (center_pix+half_dist_pixels) & coords$x >= (center_pix-half_dist_pixels) 
+    center_indices=which(coords$x< (center_pix+half_dist_pixels) & coords$x >= (center_pix-half_dist_pixels)
                          & coords$y < (center_pix+half_dist_pixels) & coords$y >= (center_pix-half_dist_pixels))
-    
+
     center_com=full_com[center_indices,]
     com=center_com[sample(1:nrow(center_com),size=bee_abund),]
     sad=table(com)
     data.frame(rich=n_distinct(com),shannon=exp(diversity(sad)),
-               simpson=diversity(sad,'invsimpson'),filename=file_name)
-    
-})
+               simpson=diversity(sad,'invsimpson'),sample_size=bee_abund,filename=file_name)
 
+},otherwise=NULL))
+
+
+# saveRDS(focal_coms,"/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/fragmentation/processed_data/focal_coms_14march2022.rds")
+focal_coms=readRDS("/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/fragmentation/processed_data/focal_coms_14march2022.rds")
+
+#check its right sample size
+focal_coms %>% left_join(param_coms) %>% 
+  group_by(spec,global) %>% summarize(n())
 
 spec_df=focal_coms %>% left_join(param_coms) %>% 
   group_by(spec,global) %>%
     summarize(rich=median(rich),shan=median(shannon),simp=median(simpson),n=n())%>%
     mutate(vary_spec=round(global,5)==round(focal_global,5),vary_global=spec==focal_spec)
 
-
+#look distribution of richness:
+rich_ls=focal_coms %>% left_join(param_coms) %>%mutate(spec_global=paste(spec,global)) %>% split(.$spec_global)
+for(df in rich_ls){
+  with(df,hist(rich,main=spec_global[1]))
+}
 #pdf('methods_param.pdf',width=11)
+hist(spec_df$rich)
+
 par(mfrow=c(1,2),pch=16,cex=1.5)
-with(spec_df %>% filter(vary_spec ),plot(rich~spec,ylim=c(0,40)))
+with(spec_df %>%filter(vary_spec),plot(rich~spec,ylim=c(0,40)))
+
 abline(h=exp(predicted_richness),col='red')
 abline(h=(lower_rich),col='red',lt=2)
 abline(h=(upper_rich),col='red',lt=2)
-with(spec_df %>% filter(spec==0.000274250 &vary_spec),points(spec,rich,col='blue'))
-with(spec_df %>% filter(round(spec,5)==round(0.000128750,5)  &vary_spec),points(spec,rich,col='red'))
+#with(spec_df %>% filter(spec==0.000274250 &vary_spec),points(spec,rich,col='blue'))
 
 with(spec_df %>% filter(vary_global),plot(rich~log10(global),ylim=c(0,40)))
+
 abline(h=exp(predicted_richness),col='red')
 abline(h=(lower_rich),col='red',lt=2)
 abline(h=(upper_rich),col='red',lt=2)
 #dev.off()
+
 analyze_me=spec_df %>% filter(vary_spec)
 spec_mod=lm(analyze_me$rich~analyze_me$spec)
+
 make_focal_spec=(exp(predicted_richness)-coef(spec_mod)[1])/coef(spec_mod)[2]
 
 #next measure beta div
-file_name=focal_reps$filename[[1]]
-beta_div=focal_reps$filename %>% future_map(function(file_name){
-    full_com=vroom(file_name,delim="\"",col_names = F)
-    sub_coms=1:nrow(center_coords) %>% map_dfr(function(i){
-        bee_abund=rtruncnorm(1, a=0, mean = predict_abund , sd = sigma_abund)
-        half_dist_pixels=ceiling(sqrt(bee_abund/density[1])/2)
-        
-        x=center_coords[i,]$x;y=center_coords[i,]$y
-        
-        center_indices=which(coords$x< (x+half_dist_pixels) & coords$x >= (x-half_dist_pixels) 
-                             & coords$y < (y+half_dist_pixels) & coords$y >= (y-half_dist_pixels))
-        center_com=full_com[center_indices,] 
-        quadrant_com=center_com[sample(1:nrow(center_com),size=bee_abund),] %>% mutate(site=i)
-        
-    })
-    com_matrix=sub_coms %>% group_by(site,X1) %>% summarize(n=n()) %>%
-        pivot_wider(values_from=n,names_from=X1,values_fill = 0) 
-    com_matrix=com_matrix[,!names(com_matrix)=='site']
-    data.frame(filename=file_name,jaccard=mean(vegdist(com_matrix,method='jaccard')))
-},.options=furrr_options(seed=T)) %>% bind_rows%>% left_join(param_coms)
+future:::ClusterRegistry("stop")
+plan(multisession,workers=4)
 
+file_name=focal_reps$filename[[1]]
+# beta_div=focal_reps$filename%>% future_map(function(file_name){
+#     full_com=vroom(file_name,delim="\"",col_names = F)
+#     sub_coms=1:nrow(center_coords) %>% map_dfr(function(i){
+#         bee_abund=rtruncnorm(1, a=0, mean = predict_abund , sd = sigma_abund)
+#         half_dist_pixels=ceiling(sqrt(bee_abund/density[1])/2)
+# 
+#         x=center_coords[i,]$x;y=center_coords[i,]$y
+# 
+#         center_indices=which(coords$x< (x+half_dist_pixels) & coords$x >= (x-half_dist_pixels)
+#                              & coords$y < (y+half_dist_pixels) & coords$y >= (y-half_dist_pixels))
+#         center_com=full_com[center_indices,]
+#         quadrant_com=center_com[sample(1:nrow(center_com),size=bee_abund),] %>% mutate(site=i)
+# 
+#     })
+#     com_matrix=sub_coms %>% group_by(site,X1) %>% summarize(n=n()) %>%
+#         pivot_wider(values_from=n,names_from=X1,values_fill = 0)
+#     com_matrix=com_matrix[,!names(com_matrix)=='site']
+#     data.frame(filename=file_name,jaccard=mean(vegdist(com_matrix,method='jaccard')))
+# },.options=furrr_options(seed=T)) %>% bind_rows%>% left_join(param_coms)
+# saveRDS(beta_div,"/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/fragmentation/processed_data/beta_div_14march2022.rds")
+beta_div=readRDS("/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/fragmentation/processed_data/beta_div_14march2022.rds")
 
 beta_df=beta_div %>% group_by(spec,global) %>% 
   summarize(jaccard=median(jaccard),n=n())%>% left_join(spec_df)
@@ -314,29 +385,63 @@ beta_df=beta_div %>% group_by(spec,global) %>%
 head(fbees_allsites)
 head(sites)
 big_forests=sites[sites$forest500>.8,]$site #just pick sites with >.8 forest cover
-fbee_matrix=fbees_allsites %>% filter(site %in% big_forests) %>%
+fbee_matrix=data.frame(fbees_allsites %>% filter(site %in% big_forests) %>%
     group_by(site,genus_species) %>% summarize(n=n())%>%
-    pivot_wider(values_from=n,names_from=genus_species,values_fill = 0) 
+    pivot_wider(values_from=n,names_from=genus_species,values_fill = 0))
+row.names(fbee_matrix) <- fbee_matrix$site
 fbee_matrix=fbee_matrix[,!names(fbee_matrix)=='site']
 obs_jaccard_vec=as.vector(vegdist(fbee_matrix,method='jaccard'))
 obs_jaccard=mean(obs_jaccard_vec)
 lower_jacc=quantile(obs_jaccard_vec,.1)
 upper_jacc=quantile(obs_jaccard_vec,.9)
 
+#intercept of distance-decay
+#make df, sites, with lat and lon for each site
+big_sites = fbees_allsites %>% filter(site %in% big_forests) %>%
+  group_by(site,latitude,longitude) %>% 
+  summarize(n=n()) %>% select(-n) %>%
+  rename(name=site,lat=latitude,lon=longitude)
+
+# #get matrix of pairwise geographic distances in r
+# geo_dist=round(GeoDistanceInMetresMatrix(big_sites))
+# with(big_sites,gdist(lat.1=lat[1],lon.1=lon[1],lat.2=lat[2],lon.2=lon[2],units='m'))
+
+# geo_dist[upper.tri(geo_dist)]<-NA
+# geo_vec2=as.vector(geo_dist)
+# geo_vec=geo_vec2[is.na(geo_vec2)==F & geo_vec2 !=0]
+# 
+# jacc=as.matrix(vegdist(fbee_matrix,method='jaccard'))
+# mean(colnames(jacc)==colnames(geo_dist))
+# jacc[upper.tri(jacc)] <- NA
+# jacc_vec2=as.vector(jacc)
+# jacc_vec=jacc_vec2[is.na(jacc_vec2)==F & jacc_vec2 !=0]
+# 
+# par(mfrow=c(1,1))
+# plot(jacc_vec~geo_vec)
+# coefs=coef(lm(jacc_vec~geo_vec))
+# abline(a=coefs[1],b=coefs[2],lwd=2,col='red')
+# abline(h=mean(jacc_vec),lwd=2,col='blue')
+
 #pdf('methods_param.pdf',width=11)
 par(mfrow=c(1,2),pch=16,cex=1.5)
-with(beta_df %>% filter(vary_spec),plot(jaccard~spec))
+with(beta_df %>% filter(vary_spec & ! vary_global),plot(jaccard~spec,ylim=c(.3,.9)))
+# with(beta_df,plot(jaccard~spec,ylim=c(.1,1)))
+
 abline(h=obs_jaccard,col='red')
 abline(h=(lower_jacc),col='red',lt=2)
 abline(h=(upper_jacc),col='red',lt=2)
-with(beta_df %>% filter(spec==0.000274250),points(jaccard~spec,col='red'))
 
-with(beta_df %>% filter(vary_global),plot(jaccard~log10(global),ylim=c(0.5,.9)))
+with(beta_df %>% filter(vary_global),plot(jaccard~log10(global),ylim=c(.3,.9)))
+# with(beta_df ,plot(jaccard~log10(global)))
+
 abline(h=obs_jaccard,col='red')
 abline(h=(lower_jacc),col='red',lt=2)
 abline(h=(upper_jacc),col='red',lt=2)
 #dev.off()
 
+param_coms %>% filter(timestep==200000) %>%
+  group_by(spec,global) %>% 
+  summarize(n=n())
 
 #next, figure out which values of spec and dispersal to draw from
 #first richness
@@ -492,44 +597,49 @@ lines(glob_xs,glob_ys,type='l',col='blue')
 
 
 #make pdf for supplement
-# pdf('param_exploration.pdf',width=11)
-par(mfrow=c(2,2),pch=16,cex=1.5,mar=c(2,4,1,.5))
+my_cols=RColorBrewer::brewer.pal(11,"RdYlBu")[c(2,11)]
+my_red=my_cols[1];my_blue=my_cols[2]
+
+# pdf('param_exploration_15march2022.pdf',width=11)
+alt_dir = "/Users/colleen/Dropbox/Fall_2014/Research/Fragmentation/fragmentation/"
+tiff(paste0(alt_dir,'figures/param_exploration.tiff'), units="in", width=11, height=10, res=700, compression = 'lzw')
+par(mfrow=c(2,2),pch=16,cex=1.5,mar=c(2,4,1,.5),lwd=2)
 with(spec_df %>% filter(vary_spec & spec !=0.00022575) ,
      plot(rich~spec,ylim=c(0,30),xlab="",ylab='species richness'))
-abline(h=exp(predicted_richness),col='red')
-abline(h=(lower_rich),col='red',lt=2)
-abline(h=(upper_rich),col='red',lt=2)
-lines(spec_xs_rich,spec_ys_rich,type='l',col='blue')
-
+abline(h=exp(predicted_richness),col=my_red)
+abline(h=(lower_rich),col=my_red,lt=2)
+abline(h=(upper_rich),col=my_red,lt=2)
+lines(spec_xs_rich,spec_ys_rich,type='l',col=my_blue)
 par(mar=c(2,2,1,.5))
 with(spec_df %>% filter(vary_global),
      plot(rich~log10(global),ylim=c(0,30),xlab="",ylab=""))
-abline(h=exp(predicted_richness),col='red')
-abline(h=(lower_rich),col='red',lt=2)
-abline(h=(upper_rich),col='red',lt=2)
-lines(spec_xs_global,spec_ys_global,type='l',col='blue')
+abline(h=exp(predicted_richness),col=my_red)
+abline(h=(lower_rich),col=my_red,lt=2)
+abline(h=(upper_rich),col=my_red,lt=2)
+lines(spec_xs_global,spec_ys_global,type='l',col=my_blue)
 
-#plot long-distanece dispersal
+#plot long-distance dispersal
 par(mar=c(4.3,4,1,.5))
-with(beta_df %>% filter(vary_spec& spec !=0.00022575),
-     plot(jaccard~spec,ylim=graph_lims,xlab='speciation'))
-abline(h=obs_jaccard,col='red')
-abline(h=(lower_jacc),col='red',lt=2)
-abline(h=(upper_jacc),col='red',lt=2)
-lines(spec_xs,spec_ys,type='l',col='blue')
+with(beta_df %>% filter(vary_spec),
+     plot(jaccard~spec,ylim=graph_lims,xlab='speciation',ylab='jaccard distance'))
+abline(h=obs_jaccard,col=my_red)
+abline(h=(lower_jacc),col=my_red,lt=2)
+abline(h=(upper_jacc),col=my_red,lt=2)
+lines(spec_xs,spec_ys,type='l',col=my_blue)
 
 par(mar=c(4.3,2,1,.5))
 with(beta_df %>% filter(vary_global),
      plot(jaccard~log10(global),ylim=graph_lims,
-          xlab="log10(long-range dispersal)",ylab=""))
-abline(h=obs_jaccard,col='red')
-abline(h=(lower_jacc),col='red',lt=2)
-abline(h=(upper_jacc),col='red',lt=2)
-lines(glob_xs,glob_ys,type='l',col='blue')
-# dev.off()
+          xlab=expression('log'[10]*'(long-range dispersal)'),ylab=""))
+abline(h=obs_jaccard,col=my_red)
+abline(h=(lower_jacc),col=my_red,lt=2)
+abline(h=(upper_jacc),col=my_red,lt=2)
+lines(glob_xs,glob_ys,type='l',col=my_blue)
+ dev.off()
 
 
-#summarize everything
+ 
+ #summarize everything
 print(paste0('for the communities to match the richness of bee communities, the speciation value
       should be between ',vals_spec_rich[1],' and ',vals_spec_rich[2]))
 print(paste0('for the communities to match the beta diversity of bee communities, the speciation value
@@ -617,3 +727,58 @@ exp(predicted_richness)-coef(check)[1]
 # 
 # 
 # 
+#make pdf for supplement
+my_cols=RColorBrewer::brewer.pal(11,"RdYlBu")[c(2,11)]
+my_red=my_cols[1];my_blue=my_cols[2]
+
+
+print(paste0("the minimum speciation value we'll use is ",final_min_spec," and
+             the maximum speciation value we'll use is ",final_max_spec))
+print(paste0("the minimum global value we'll use is 10^",final_min_global," and
+             the maximum global value we'll use is 10^",final_max_global))
+
+
+par(mfrow=c(2,2),pch=16,cex=1.5,mar=c(2,4,1,.5),lwd=2)
+with(spec_df %>% filter(vary_spec & spec !=0.00022575) ,
+     plot(rich~spec,ylim=c(0,30),xlab="",ylab='species richness'))
+abline(h=exp(predicted_richness),col=my_red)
+abline(h=(lower_rich),col=my_red,lt=2)
+abline(h=(upper_rich),col=my_red,lt=2)
+lines(spec_xs_rich,spec_ys_rich,type='l',col=my_blue)
+abline(v=final_min_spec)
+abline(v=final_max_spec)
+
+par(mar=c(2,2,1,.5))
+with(spec_df %>% filter(vary_global),
+     plot(rich~log10(global),ylim=c(0,30),xlab="",ylab=""))
+abline(h=exp(predicted_richness),col=my_red)
+abline(h=(lower_rich),col=my_red,lt=2)
+abline(h=(upper_rich),col=my_red,lt=2)
+lines(spec_xs_global,spec_ys_global,type='l',col=my_blue)
+abline(v=final_min_global)
+abline(v=final_max_global)
+
+#plot long-distance dispersal
+par(mar=c(4.3,4,1,.5))
+with(beta_df %>% filter(vary_spec),
+     plot(jaccard~spec,ylim=graph_lims,xlab='speciation',ylab='jaccard distance'))
+abline(h=obs_jaccard,col=my_red)
+abline(h=(lower_jacc),col=my_red,lt=2)
+abline(h=(upper_jacc),col=my_red,lt=2)
+lines(spec_xs,spec_ys,type='l',col=my_blue)
+abline(v=final_min_spec)
+abline(v=final_max_spec)
+
+par(mar=c(4.3,2,1,.5))
+with(beta_df %>% filter(vary_global),
+     plot(jaccard~log10(global),ylim=graph_lims,
+          xlab=expression('log'[10]*'(long-range dispersal)'),ylab=""))
+abline(h=obs_jaccard,col=my_red)
+abline(h=(lower_jacc),col=my_red,lt=2)
+abline(h=(upper_jacc),col=my_red,lt=2)
+lines(glob_xs,glob_ys,type='l',col=my_blue)
+abline(v=final_min_global)
+abline(v=final_max_global)
+# dev.off()
+
+

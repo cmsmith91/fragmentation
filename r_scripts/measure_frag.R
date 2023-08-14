@@ -11,13 +11,19 @@ library(mapdata)
 library(stars)
 library(furrr)
 library(landscapemetrics)
+library(factoextra)
+library(cluster)
+library(NbClust)
 select=dplyr::select
 map=maps::map
 
 #plan: crop nlcd data to just be in the northeast US
 #load nlcd data
-img_path="~/Dropbox/Fall_2014/postdoc/inat project/data_current/NLCD_2016_LandCover/NLCD_2016_Land_Cover_L48_20190424.img"
+# img_path="~/Dropbox/Fall_2014/postdoc/inat project/data_current/NLCD_2016_LandCover/NLCD_2016_Land_Cover_L48_20190424.img"
+img_path = '/Volumes/Seagate/nlcd/NLCD_2016_Land_Cover_L48_20190424.img'
+
 nlcd=read_stars(img_path)
+
 
 #get shapefile of northeastern US
 northeast_us=tolower(c("Maine", "Vermont", "New Hampshire", "Massachusetts", "Rhode Island", "Connecticut", "New York", "Pennsylvania", 
@@ -27,9 +33,42 @@ northeast_sf= st_as_sf(map("state", plot = FALSE, fill = TRUE)) %>%
     filter(ID %in% northeast_us)
 northeast_sf_crs=st_transform(northeast_sf,crs=st_crs(nlcd))
 
+# load to shape file to cut out nlcd raster in qgis and get sums of each LU
+# note: was still getting similar error in QQIS that I was getting in R
+# it worked to d a buffer of distance 0 around the northeast shapefile
+# and then run the cut after that 
+# (using Processing toolbox - GDAL - Raster Extraction - clip raster by mask layer)
+# then do raster layer unique values report
+# st_write(northeast_sf_crs, "processed_data/northeast_shapefile.shp")
+
+nlcd_table = read_csv('processed_data/nlcd unique values.csv')
+
+#what I want - %percent urban and ag in the matrix category
+
+
 #crop the nlcd data to be just states in the northeastern US
 nlcd_cropped=nlcd %>% st_crop(northeast_sf_crs)
-plot(nlcd_cropped)
+
+#make nlcd key for matrix habitat (in 'everything else' category)
+nlcd_key = data.frame(category = c('developed','developed','developed','developed','barren','shrubland','shrubland','herbaceous','herbaceous','herbaceous','herbaceous','agriculture','agriculture'),
+                      value = c(21,22,23,24,31,51,52,71,72,73,74,81,82))
+
+#filter nlcd_table to just be matrix (ie everything in nlcd_key)
+(nlcd_matrix = nlcd_key %>%
+    left_join(nlcd_table) %>%
+    filter(!is.na(count)) %>%
+    group_by(category) %>%
+    summarize(total_count=sum(count)) %>%
+    mutate(percentage = 100*total_count/sum(total_count)))
+
+#group shrubland, barren and herbaceous together
+nlcd_matrix %>%
+    filter(category  %in% c('barren',"shrubland", "herbaceous")) %>%
+    summarize(sum(percentage))
+
+# plot(nlcd_cropped)
+# check = st_as_stars(nlcd_cropped==1)
+# table(check)
 
 #now make a grid over northeast us shapefile
 #transform to crs in meters: utm zone are in meters - most of northeast is in 18n
@@ -43,10 +82,18 @@ grid=big_grid[northeast_sf_crs_meters] %>% st_transform(crs=st_crs(nlcd))
 
 #plot to make sure it looks ok
 #just plot nj for now...
-nj=northeast_sf_crs %>% filter(ID=='new jersey')
+nj=northeast_sf_crs %>% 
+    filter(ID=='new jersey')
 grid_nj=grid[nj]
 ggplot(data=northeast_sf_crs %>% filter(ID=='new jersey')) + geom_sf(fill='lightblue')+
     geom_sf(data=grid_nj,size=.06)
+
+##
+#northeast_sf_crs
+## try looping through states, converting to stars object and getting amount of total habitat
+## and the amount of matrix habitat
+# northeast_data = st_as_stars(nlcd[nj])
+# table(northeast_data)
 
 #loop through each grid point and make a square buffer around it
 grid[1]
@@ -66,7 +113,7 @@ plot(nlcd[square], reset = FALSE,main="",axes=T)
 #convert raster to forest/matrix/water
 landscape=nlcd[square]
 
-landscape %>% map(function(x) min(x))
+landscape %>% purrr::map(function(x) min(x))
 yy = adrop(landscape)
 landscape_data=st_as_stars(landscape) # convert from stars_proxy object to stars object with all the data
 landscape_table=table(landscape_data[[1]])
@@ -79,12 +126,33 @@ wetland="Emergent Herbaceuous Wetlands"
 null_vals=c("Unclassified" ,"")
 matrix_cats=unique(names(landscape_table))[!unique(names(landscape_table)) %in% c(forest_cats,water,wetland,null_vals)]
 
+
+##
 i=2
 
 #first, 2400 m
 lu_ls=list()
 plan(multisession, workers = 6)
 landscape_sizes=c(2400,1500,600)
+
+
+all_the_squares=(20:80)^2
+seq(400,6400,by=(6400-400)/4)
+
+#get new lanscape sizes
+vec=c()
+for(numb in c(1900 ,3400, 4900)){
+    i=which(c(1900 ,3400, 4900)==numb)
+    new=all_the_squares[abs(all_the_squares-numb)==min(abs(all_the_squares-numb))]
+    vec[i]=new
+}
+landscape_sizes=c(20, 44, 58, 70, 80)*30
+plot(landscape)
+
+#for testing the map functions:
+landscape_size = 1320
+
+
 lu_summs=landscape_sizes %>% purrr::map(function(landscape_size){
     1:length(grid)%>% future_map(possibly(function(i){
         square = st_sfc(st_buffer(grid[i], landscape_size/2,endCapStyle="SQUARE",joinStyle="MITRE"), crs = st_crs(nlcd))
@@ -171,7 +239,7 @@ for(i in 1:3){
     with(a[keep_me,], plot(prop_forest,edge_density,ylim=c(0,230)))
     
 }
-#get rid of landscapes overlapping the edge ofthe raster data [or where there is null raster data]
+#get rid of landscapes overlapping the edge of the raster data [or where there is null raster data]
 #or where there is greater than 5% water/wetland
 remove_me=lu_summs %>% purrr::map(function(ls){
     df=ls %>% bind_rows %>% filter(prop_null !=0 | (prop_wetland+prop_water)>0.05) 
@@ -268,8 +336,8 @@ hab_maps %>% purrr::map(function(ls){
 
     })  
 
-# saveRDS(hab_maps,'processed_data/hab_maps18nov2021.rds')
-# saveRDS(lu_df2,'processed_data/lu_info18nov2021.rds')
+# saveRDS(hab_maps,'processed_data/hab_maps03dec2021.rds')
+# saveRDS(lu_df2,'processed_data/lu_info03dec2021.rds')
 
 #old code
 
