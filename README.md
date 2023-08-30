@@ -1,6 +1,6 @@
 # Spatial effects of fragmentation on biodiversity
 
-This repository contains code for manuscript *Fragmentation mitigates biodiversity loss immediately after habitat destruction*
+This repository contains code for the manuscript *Fragmentation mitigates biodiversity loss immediately after habitat destruction*
 
 ## General workflow for analyses
 
