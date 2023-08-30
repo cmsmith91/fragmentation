@@ -36,11 +36,6 @@ focal_edge=edge %>%
     mutate(landscape_id=1:n())
 
 
-#####
-###IMPORTANT
-#NOTE TO SELF: ONCE FINAL SIMS ARE RUN CHANGE TO ONE OF THOSE!!!!
-#######3
-
 #get path names of all the communities
 path_names=paste0(alt_path,"/",list.files(alt_path)) %>% purrr::map(function(file_path){
     path_name_vec=paste0(file_path,'/',list.files(file_path))
