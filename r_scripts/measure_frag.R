@@ -17,9 +17,9 @@ library(NbClust)
 select=dplyr::select
 map=maps::map
 
-#plan: crop nlcd data to just be in the northeast US
-#load nlcd data
-# img_path="~/Dropbox/Fall_2014/postdoc/inat project/data_current/NLCD_2016_LandCover/NLCD_2016_Land_Cover_L48_20190424.img"
+# crop nlcd data to just be in the northeast US
+# load nlcd data
+# img_path = "~/Dropbox/Fall_2014/postdoc/inat project/data_current/NLCD_2016_LandCover/NLCD_2016_Land_Cover_L48_20190424.img"
 img_path = '/Volumes/Seagate/nlcd/NLCD_2016_Land_Cover_L48_20190424.img'
 
 nlcd=read_stars(img_path)
@@ -33,17 +33,18 @@ northeast_sf= st_as_sf(map("state", plot = FALSE, fill = TRUE)) %>%
     filter(ID %in% northeast_us)
 northeast_sf_crs=st_transform(northeast_sf,crs=st_crs(nlcd))
 
-# load to shape file to cut out nlcd raster in qgis and get sums of each LU
-# note: was still getting similar error in QQIS that I was getting in R
-# it worked to d a buffer of distance 0 around the northeast shapefile
-# and then run the cut after that 
-# (using Processing toolbox - GDAL - Raster Extraction - clip raster by mask layer)
+# To get the sum of each land-use in the northeasern USA, it is much faster to use QGIS than R
+# to use QGIS:
+# load into QGIS the shapefile of the northeastern USA and the raster NLCD data 
+# create a buffer of distance 0 around the northeast shapefile
+# and cut the raster data using the northeast shapefile:
+# # # use Processing toolbox - GDAL - Raster Extraction - clip raster by mask layer
 # then do raster layer unique values report
+
+# code for downloading northeast shapefile
 # st_write(northeast_sf_crs, "processed_data/northeast_shapefile.shp")
 
 nlcd_table = read_csv('processed_data/nlcd unique values.csv')
-
-#what I want - %percent urban and ag in the matrix category
 
 
 #crop the nlcd data to be just states in the northeastern US
