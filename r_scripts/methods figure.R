@@ -79,11 +79,11 @@ lowedge_index=which(hab_maps_unlisted %>% map_lgl(function(df){
     df$landscape_size[1]==2400 & df$grid_index[1] ==lowedge_gridindex
 }))
 highedge_ls=hab_maps_unlisted[[highedge_index]] %>% mutate(color=ifelse(category=="forest",'darkgreen','white'))
-highedge_ls[highedge_ls$category=='water',]$color <-'blue'
+if(nrow(highedge_ls[highedge_ls$category=='water',]) !=0) highedge_ls[highedge_ls$category=='water',]$color <-'blue'
 
 
 lowedge_ls=hab_maps_unlisted[[lowedge_index]] %>% mutate(color=ifelse(category=="forest",'darkgreen','white'))
-lowedge_ls[lowedge_ls$category=='water',]$color <-'blue'
+if(nrow(lowedge_ls[lowedge_ls$category=='water',]) !=0) lowedge_ls[lowedge_ls$category=='water',]$color <-'blue'
 
 par(mfrow=c(1,2),pty="s",cex=.55,yaxt="n",xaxt='n')
 with(lowedge_ls,plot(x,y,col=color,pch=15,xlab='',ylab=''))
@@ -139,7 +139,7 @@ par(mfrow(1,2))
 with(loss_plot1,plot(jitter(x),jitter(y),col=col,xlab='',ylab=''))
 with(loss_plot2,plot(jitter(x),jitter(y),col=col,xlab='',ylab=''))
 
-pdf('figures/methods_fig-24july2022.pdf',width=12,height=8)
+#pdf('figures/methods_fig-24july2022.pdf',width=12,height=8)
 par(mfcol=c(2,3),mar=c(.2,.2,3.5,.2),pty="s",pch=15,cex=.59,yaxt="n",xaxt='n',cex.main=4)
 #forest landscapes
 with(lowedge_ls,plot(x,y,col=color,pch=15,xlab='',ylab='',main='low edge'))
@@ -152,10 +152,12 @@ with(plot_df2,plot(jitter(x),jitter(y),col=col,xlab='',ylab='',main=paste0(highe
 #coms after forest loss
 with(loss_plot1,plot(jitter(x),jitter(y),col=col,xlab='',ylab='',main=paste0(lowedge_after,' species')))
 with(loss_plot2,plot(jitter(x),jitter(y),col=col,xlab='',ylab='',main=paste0(highedge_after,' species')))
-dev.off()
+#dev.off()
 
 
 par(pardefault)
+
+#####
 ##now add map
 #get shapefile of northeastern US
 northeast_us=tolower(c("Maine", "Vermont", "New Hampshire", "Massachusetts", "Rhode Island", "Connecticut", "New York", "Pennsylvania", 
@@ -172,7 +174,9 @@ big_grid2=st_make_grid(northeast_sf_crs_meters,10000,what = "centers")
 grid=big_grid[northeast_sf_crs_meters] 
 grid2=st_transform(grid,crs = 4326)
 
-# old
+
+
+
 # load the data for the map of the northeastern US
 test <- map("world2Hires",region=c("USA","Canada"),fill=T,plot=F)
 test$x <- test$x-360
@@ -241,6 +245,9 @@ grid_sites_over_region2400
 # dev.off()
 
 
+
+
+##old 
 lat_lon_focal1500=focal_edge %>% filter(size_m==1500) %>%
     select(f_cat,edge_cat,grid_index) %>%
     left_join(lat_lon2) %>%
