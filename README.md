@@ -26,6 +26,6 @@ This repository contains code for the manuscript *Fragmentation mitigates biodiv
 
 ## Other data
 
-| File Name  | Description  | 
+| Description  | Location  | 
 | :------------ |:---------------| 
 | Landcover data from northeastern USA      | can be found [here](https://www.mrlc.gov/data/nlcd-2016-land-cover-conus)    |
