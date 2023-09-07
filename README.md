@@ -24,3 +24,8 @@ This repository contains code for the manuscript *Fragmentation mitigates biodiv
 | slurm-out | Folder containing text files of raw community data from the neutral model. In the text files, each number is a different species and its position in the vector indicates its x, y coordinate in the 2D map, see [python_code/neutral_mod-amarel15june2021.py](https://github.com/cmsmith91/fragmentation/blob/main/python_code/neutral_mod-amarel15june2021.py)  | 
 
 
+## Other data
+
+| File Name  | Description  | 
+| :------------ |:---------------| 
+| Landcover data from northeastern USA      | can be found [here](https://www.mrlc.gov/data/nlcd-2016-land-cover-conus)    |
