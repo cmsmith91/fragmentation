@@ -20,7 +20,7 @@ This repository contains code for the manuscript *Fragmentation mitigates biodiv
 | ForestBeeSiteInfo_final.csv | data file of site information for forest sites from [Smith et al 2021](https://www.sciencedirect.com/science/article/pii/S0006320721002548)        | 
 | hab_maps03dec2021.rds | R list of habitat maps used in the simulations. These were the highest- and lowest-edge landscapes from NLCD data. Each data-frame in the list contains x,y cooordinates of forest and matrix habitat in the landscape        | 
 | loss_simulation_n100_output.rds | output of forest loss simulations, with the number of species in the community before and after deforestation   | 
-| lu_info03dec2021.rds | R list of data frames with forest landscape data for landscapes sampled in the norhteastern U.S.  | 
+| lu_info03dec2021.rds | R list of data frames with forest landscape data (e.g., percent forest area, edge density) for landscapes we sampled in the norhteastern U.S. Each dataframe in the list contains data for a different landscape size | 
 | slurm-out | folder containing text files of raw community data from neutral model. in the text files, each number is a different species and the position, i, in the vector indicates its x, y coordinate   | 
 
 
