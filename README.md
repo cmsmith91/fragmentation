@@ -11,7 +11,7 @@ This repository contains code for the manuscript *Fragmentation mitigates biodiv
 5. Summarize results and make figures for the  manuscript using [results_summary.R](https://github.com/cmsmith91/fragmentation/blob/main/r_scripts/results_summary.R), [r_scripts/plot_edge_area.R](https://github.com/cmsmith91/fragmentation/blob/main/r_scripts/plot_edge_area.R), and [r_scripts/methods figure.R](https://github.com/cmsmith91/fragmentation/blob/main/r_scripts/methods%20figure.R).
 
 
-## Description of data in FragData_zipped
+## Description of data in FragData.zip
 
 | File Name  | Description  | 
 | :------------ |:---------------| 
