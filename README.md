@@ -21,4 +21,6 @@ This repository contains code for the manuscript *Fragmentation mitigates biodiv
 | hab_maps03dec2021.rds | R list of habitat maps used in the simulations. These were the highest- and lowest-edge landscapes from NLCD data. Each data-frame in the list contains x,y cooordinates of forest and matrix habitat in the landscape        | 
 | loss_simulation_n100_output.rds | output of forest loss simulations, with the number of species in the community before and after deforestation   | 
 | lu_info03dec2021.rds | R list of data frames with forest landscape data for landscapes sampled in the norhteastern U.S.  | 
+| slurm-out | folder containing text files of raw community data from neutral model. in the text files, each number is a different species and the position, i, in the vector indicates its x, y coordinate: x = i % size_vector; j =n(i/size_vector).astype(int)   | 
+
 
