@@ -9,3 +9,12 @@ This repository contains code for the manuscript *Fragmentation mitigates biodiv
 3. Find the most and least fragmented landscapes in the northeastern USA using [r_scripts/measure_frag.R](https://github.com/cmsmith91/fragmentation/blob/main/r_scripts/measure_frag.R)
 4. Run simulation of forest loss using [r_scripts/simulate forest loss.R](https://github.com/cmsmith91/fragmentation/blob/main/r_scripts/simulate%20forest%20loss.R).
 5. Summarize results and make figures for the  manuscript using [results_summary.R](https://github.com/cmsmith91/fragmentation/blob/main/r_scripts/results_summary.R), [r_scripts/plot_edge_area.R](https://github.com/cmsmith91/fragmentation/blob/main/r_scripts/plot_edge_area.R), and [r_scripts/methods figure.R](https://github.com/cmsmith91/fragmentation/blob/main/r_scripts/methods%20figure.R).
+
+
+## Description of data in FragData_zipped
+
+| File Name  | Description  | 
+| :------------ |:---------------| 
+| forest_bees.csv      | list of forest specialist bee species in northeastern USA; from [Smith et al 2021](https://www.sciencedirect.com/science/article/pii/S0006320721002548) | 
+| forestbee1718_spec.csv      | data file of all specimen records from forest sites in [Smith et al 2021](https://www.sciencedirect.com/science/article/pii/S0006320721002548)        |   
+| ForestBeeSiteInfo_final.csv | data file of site information for forest sites from [Smith et al 2021](https://www.sciencedirect.com/science/article/pii/S0006320721002548)        | 
